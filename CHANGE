@@ -2,3 +2,8 @@ v1.0.0
 
     1. Initial version.
         1. Add a new library "SimpleTable".
+
+v1.1.0
+    1. SimpleTable
+        1. Add the content row divider check flow.
+

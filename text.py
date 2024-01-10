@@ -9,6 +9,7 @@
 Library for Text Processing
 """
 
+import math
 from dataclasses import dataclass, field
 from enum import IntEnum
 from typing import Any
@@ -19,24 +20,27 @@ from typing import Any
 
 
 class Align(IntEnum):
-    TL, TC, TR = 0, 1, 2
-    CL, CC, CR = 3, 4, 5
-    BL, BC, BR = 6, 7, 8
+    NONE = 0
+    TL, TC, TR = 1, 2, 3
+    CL, CC, CR = 4, 5, 6
+    BL, BC, BR = 7, 8, 9
 
 
 class SimpleTable:
     """A Simple Text Table Generator."""
 
-    def __init__(self, heads: dict, sep: str):
+    def __init__(self, heads: dict, sep: str='/', rdiv_cnt: Any=math.inf):
         """
         Arguments
         ---------
-        heads  format={key1: title1, key2: title2, ...}.
-        sep    the separator use to split the string.
+        heads     format={key1: title1, key2: title2, ...}.
+        sep       the separator use to split the string.
+        rdiv_cnt  row divider add between the value of rdiv_cnt (ignore if set 0).
         """
         self._head_dict = {}
         self._table = [[]]
         self._sep = sep
+        self._rdiv_cnt = math.inf if rdiv_cnt == 0 else rdiv_cnt
 
         for key, title in heads.items():
             col_size = max([len(x) for x in title.split(self._sep)])
@@ -60,6 +64,10 @@ class SimpleTable:
     @property
     def sep(self) -> str:
         return self._sep
+
+    @property
+    def rdiv_cnt(self) -> int:
+        return self._rdiv_cnt
 
     @property
     def max_row(self) -> int:
@@ -127,7 +135,7 @@ class SimpleTable:
         self._head_dict[new_key] = head
         del self._head_dict[cur_key]
 
-    def add_row(self, data: list, align: int=Align.TL):
+    def add_row(self, data: list, align: int=Align.NONE):
         """
         Add a new row.
 
@@ -137,13 +145,20 @@ class SimpleTable:
         data_size = len(data)
         self._table.append(row:=[])
         for i in range(self.max_col):
+            if self.max_row == 2:
+                align_ = Align.TL
+            elif align == Align.NONE:
+                align_ = self._table[-2][i].align
+            else:
+                align_ = align
+
             if i < data_size:
-                row.append(self.Cell(data[i], align))
+                row.append(self.Cell(data[i], align_))
                 size = len(str(data[i]))
                 if size > self._table[0][i].col_size:
                     self._table[0][i].col_size = size
             else:
-                row.append(self.Cell(align=align))
+                row.append(self.Cell("", align=align_))
 
     def add_col(self, key, title: str, data: list, align: int=Align.TL):
         """
@@ -286,7 +301,18 @@ class SimpleTable:
         print()
 
         # content
+        row_cnt = 0
         for r in range(1, self.max_row):
+            if row_cnt == self._rdiv_cnt:
+                row_cnt = 1
+                # content divider
+                print("+", end='')
+                for c in range(self.max_col):
+                    print("-{}-+".format('-' * self._table[0][c].col_size), end='')
+                print()
+            else:
+                row_cnt = row_cnt + 1
+
             print("|", end='')
             for c in range(self.max_col):
                 str_ = str(self._table[r][c].value)
