@@ -229,7 +229,11 @@ class SimpleTable:
         for i in range(1, self.max_row):
             self._table[i][index].align = align
 
-    def get_header(self) -> list:
+    def get_keys(self) -> list:
+        """Get the header of the table."""
+        return [x.key for x in self._table[0]]
+
+    def get_titles(self) -> list:
         """Get the header of the table."""
         return [x.title for x in self._table[0]]
 
@@ -256,13 +260,13 @@ class SimpleTable:
             col.append(self._table[i][index].value)
         return col
 
-    def print_table(self):
+    def print_table(self, fp=None):
         """Print the table."""
         # divider
-        print("+", end='')
+        str_ = "+"
         for c in range(self.max_col):
-            print("-{}-+".format('-' * self._table[0][c].col_size), end='')
-        print()
+            str_ += "-{}-+".format('-' * self._table[0][c].col_size) 
+        print(str_, file=fp)
 
         # header
         data, row_cnt, max_row = [], [], 0
@@ -275,30 +279,30 @@ class SimpleTable:
         row_cnt = [start_row[x]+row_cnt[x] for x in range(len(row_cnt))]
 
         for r in range(max_row):
-            print("|", end='')
+            str_ = "|"
             for c in range(self.max_col):
                 if start_row[c] <= r < row_cnt[c]:
-                    str_ = data[c][r-start_row[c]]
+                    str2 = data[c][r-start_row[c]]
                     match self._table[0][c].align:
                         case Align.TL | Align.CL | Align.BL:
-                            str_ = str_.ljust(self._table[0][c].col_size)
+                            str2 = str2.ljust(self._table[0][c].col_size)
                         case Align.TC | Align.CC | Align.BC:
-                            str_ = str_.center(self._table[0][c].col_size)
+                            str2 = str2.center(self._table[0][c].col_size)
                         case Align.TR | Align.CR | Align.BR:
-                            str_ = str_.rjust(self._table[0][c].col_size)
+                            str2 = str2.rjust(self._table[0][c].col_size)
                         case _:
                             tag = self._table[0][c].align
                             raise SyntaxError(f"The align ID is undefined ({tag}).")
                 else:
-                    str_ = ' ' * self._table[0][c].col_size
-                print(f" {str_} |", end='')
-            print()
+                    str2 = ' ' * self._table[0][c].col_size
+                str_ += f" {str2} |"
+            print(str_, file=fp)
 
         # divider
-        print("+", end='')
+        str_ = "+"
         for c in range(self.max_col):
-            print("-{}-+".format('-' * self._table[0][c].col_size), end='')
-        print()
+            str_ += "-{}-+".format('-' * self._table[0][c].col_size) 
+        print(str_, file=fp)
 
         # content
         row_cnt = 0
@@ -306,32 +310,32 @@ class SimpleTable:
             if row_cnt == self._rdiv_cnt:
                 row_cnt = 1
                 # content divider
-                print("+", end='')
+                str_ = "+"
                 for c in range(self.max_col):
-                    print("-{}-+".format('-' * self._table[0][c].col_size), end='')
-                print()
+                    str_ += "-{}-+".format('-' * self._table[0][c].col_size) 
+                print(str_, file=fp)
             else:
                 row_cnt = row_cnt + 1
 
-            print("|", end='')
+            str_ = "|"
             for c in range(self.max_col):
-                str_ = str(self._table[r][c].value)
+                str2 = str(self._table[r][c].value)
                 match self._table[r][c].align:
                     case Align.TL | Align.CL | Align.BL:
-                        str_ = str_.ljust(self._table[0][c].col_size)
+                        str2 = str2.ljust(self._table[0][c].col_size)
                     case Align.TC | Align.CC | Align.BC:
-                        str_ = str_.center(self._table[0][c].col_size)
+                        str2 = str2.center(self._table[0][c].col_size)
                     case Align.TR | Align.CR | Align.BR:
-                        str_ = str_.rjust(self._table[0][c].col_size)
+                        str2 = str2.rjust(self._table[0][c].col_size)
                     case _:
                         tag = self._table[0][c].align
                         raise SyntaxError(f"The align ID is undefined ({tag}).")
-                print(f" {str_} |", end='')
-            print()
+                str_ += f" {str2} |"
+            print(str_, file=fp)
 
         # divider
-        print("+", end='')
+        str_ = "+"
         for c in range(self.max_col):
-            print("-{}-+".format('-' * self._table[0][c].col_size), end='')
-        print()
+            str_ += "-{}-+".format('-' * self._table[0][c].col_size) 
+        print(str_, file=fp)
 

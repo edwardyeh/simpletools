@@ -7,3 +7,7 @@ v1.1.0
     1. SimpleTable
         1. Add the content row divider check flow.
 
+v1.2.0
+    1. text/SimpleTable
+        Support print table to the file.
+
