@@ -11,3 +11,8 @@ v1.2.0
     1. text/SimpleTable
         Support print table to the file.
 
+v1.3.0
+    1. text/SimpleTable
+        1. Refine the data architecture of the Header.
+        2. Update header align control.
+
