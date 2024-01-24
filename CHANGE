@@ -16,3 +16,7 @@ v1.3.0
         1. Refine the data architecture of the Header.
         2. Update header align control.
 
+v1.4.0
+    1. text/SimpleTable
+        1. Add new table style.
+

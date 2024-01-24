@@ -69,6 +69,10 @@ class SimpleTable:
     def rdiv_cnt(self) -> int:
         return self._rdiv_cnt
 
+    @rdiv_cnt.setter
+    def rdiv_cnt(self, rdiv_cnt: int):
+        self._rdiv_cnt = math.inf if rdiv_cnt == 0 else rdiv_cnt
+
     @property
     def max_row(self) -> int:
         return len(self._table)
@@ -295,13 +299,31 @@ class SimpleTable:
             col.append(self._table[i][cid].value)
         return col
 
-    def print_table(self, fp=None):
-        """Print the table."""
+    def print_table(self, fp=None, sid=1):
+        """
+        Print the table.
+
+        Arguments
+        ---------
+        fp      file out of print function. (default=None)
+        sid     table style select.         (default=1)
+        """
+        match sid:
+            case 1:
+                div_edg, div_sep = '+', '+'
+                val_edg, val_sep = '|', '|'
+            case 2:
+                div_edg, div_sep = '', ' '
+                val_edg, val_sep = '', ' '
+            case _:
+                raise SyntaxError(f"The table style is undefined (sid={sid}).")
+
         # divider
-        str_ = "+"
+        str_div = f"{div_edg}"
         for c in range(self.max_col):
-            str_ += "-{}-+".format('-' * self._table[0][c].col_size) 
-        print(str_, file=fp)
+            str_div += "-{}-{}".format('-' * self._table[0][c].col_size, div_sep) 
+        str_div = str_div[:-1] + div_edg
+        print(str_div, file=fp)
 
         # header
         data, row_cnt, max_row = [], [], 0
@@ -327,7 +349,7 @@ class SimpleTable:
                     raise SyntaxError(f"The align ID is undefined ({tag}).")
 
         for r in range(max_row):
-            str_ = "|"
+            str_ = f"{val_edg}"
             for c in range(self.max_col):
                 if row_st[c] <= r < row_ed[c]:
                     str2 = data[c][r-row_st[c]]
@@ -343,14 +365,12 @@ class SimpleTable:
                             raise SyntaxError(f"The align ID is undefined ({tag}).")
                 else:
                     str2 = ' ' * self._table[0][c].col_size
-                str_ += f" {str2} |"
+                str_ += f" {str2} {val_sep}"
+            str_ = str_[:-1] + val_edg
             print(str_, file=fp)
 
         # divider
-        str_ = "+"
-        for c in range(self.max_col):
-            str_ += "-{}-+".format('-' * self._table[0][c].col_size) 
-        print(str_, file=fp)
+        print(str_div, file=fp)
 
         # content
         row_cnt = 0
@@ -358,14 +378,11 @@ class SimpleTable:
             if row_cnt == self._rdiv_cnt:
                 row_cnt = 1
                 # content divider
-                str_ = "+"
-                for c in range(self.max_col):
-                    str_ += "-{}-+".format('-' * self._table[0][c].col_size) 
-                print(str_, file=fp)
+                print(str_div, file=fp)
             else:
                 row_cnt = row_cnt + 1
 
-            str_ = "|"
+            str_ = f"{val_edg}"
             for c in range(self.max_col):
                 str2 = str(self._table[r][c].value)
                 match self._table[r][c].align:
@@ -378,13 +395,11 @@ class SimpleTable:
                     case _:
                         tag = self._table[0][c].align
                         raise SyntaxError(f"The align ID is undefined ({tag}).")
-                str_ += f" {str2} |"
+                str_ += f" {str2} {val_sep}"
+            str_ = str_[:-1] + val_edg
             print(str_, file=fp)
 
         # divider
-        str_ = "+"
-        for c in range(self.max_col):
-            str_ += "-{}-+".format('-' * self._table[0][c].col_size) 
-        print(str_, file=fp)
+        print(str_div, file=fp)
 
 
