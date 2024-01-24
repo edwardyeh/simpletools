@@ -56,10 +56,11 @@ class SimpleTable:
     @dataclass
     class Head:
         __slot__ = ['key', 'title', 'col_size', 'align']
-        key: Any
-        title: str
-        col_size: int
-        align: Align = Align.TL
+        key          : Any
+        title        : str
+        col_size     : int
+        align        : Align = Align.TL
+        is_col_sz_fix: bool  = False
 
     @property
     def sep(self) -> str:
@@ -158,7 +159,8 @@ class SimpleTable:
             if i < data_size:
                 row.append(self.Cell(data[i], align_))
                 size = len(str(data[i]))
-                if size > self._table[0][i].col_size:
+                if (not self._table[0][i].is_col_sz_fix 
+                        and size > self._table[0][i].col_size):
                     self._table[0][i].col_size = size
             else:
                 row.append(self.Cell("", align=align_))
@@ -199,7 +201,7 @@ class SimpleTable:
         """
         Swap two specific columns.
 
-        Argument index1, index2 can be row IDs or keys.
+        Argument index1, index2 can be column IDs or keys.
         """
         cid1 = self._head_cid[index1] if type(index1) == str else index1
         cid2 = self._head_cid[index2] if type(index2) == str else index2
@@ -214,7 +216,7 @@ class SimpleTable:
         """
         Delete the specific row
 
-        Argument index should be row IDs
+        Argument index should be a row ID
         """
         if index != 0 and self.max_row > 1:
             del self._table[index]
@@ -223,7 +225,7 @@ class SimpleTable:
         """
         Delete the specific column.
 
-        Argument index can be row IDs or keys.
+        Argument index can be a column ID or key.
         """
         cid = self._head_cid[index] if type(index) == str else index
         del self._head_cid[self._table[0][cid].key]
@@ -242,7 +244,7 @@ class SimpleTable:
 
         The header row support horizontal/vertical align type change.
         The content rows only support horizontal align type change.
-        Argument index should be row IDs.
+        Argument index should be a row ID.
         """
         for i in range(self.max_col):
             self._table[index][i].align = align
@@ -253,11 +255,39 @@ class SimpleTable:
 
         The header row support horizontal/vertical align type change.
         The content rows only support horizontal align type change.
-        Argument index can be row IDs or keys.
+        Argument index can be a column ID or key.
         """
         cid = self._head_cid[index] if type(index) == str else index
         for i in range(1, self.max_row):
             self._table[i][cid].align = align
+
+    def set_col_size(self, index, size: int, is_fix: bool):
+        """
+        Set column size
+
+        Arguments
+        ---------
+        index   column index (column ID or key).
+        size    column size (set 0 to use the maximum length of contents).
+        is_fix  if is_fix is true, disable auto column size update.
+
+        If size is small than the title size, use title size.
+        """
+        cid = self._head_cid[index] if type(index) == str else index
+        head = self._table[0][cid]
+        head.is_col_sz_fix = is_fix
+        title_sz = max([len(x) for x in head.title.split(self._sep)])
+
+        col_size = size
+        if col_size == 0:
+            for i in range(1, self.max_row):
+                if (sz:=len(self._table[i][cid].value)) > col_size:
+                    col_size = sz
+
+        if col_size > title_sz:
+            head.col_size = col_size
+        else:
+            head.col_size = title_sz
 
     def get_keys(self) -> list:
         """Get the header of the table."""
@@ -334,7 +364,7 @@ class SimpleTable:
 
         row_st, row_ed = [], []
         for c in range(self.max_col):
-            match self._table[0][c].align:
+            match (align:=self._table[0][c].align):
                 case Align.TL | Align.TC | Align.TR:
                     row_st.append(0)
                     row_ed.append(row_cnt[c])
@@ -345,27 +375,25 @@ class SimpleTable:
                     row_st.append(max_row-row_cnt[c])
                     row_ed.append(max_row)
                 case _:
-                    tag = self._table[0][c].align
-                    raise SyntaxError(f"The align ID is undefined ({tag}).")
+                    raise SyntaxError(f"The align ID is undefined (align={align}).")
 
         for r in range(max_row):
             str_ = f"{val_edg}"
             for c in range(self.max_col):
                 if row_st[c] <= r < row_ed[c]:
-                    str2 = data[c][r-row_st[c]]
-                    match self._table[0][c].align:
+                    str_val = data[c][r-row_st[c]]
+                    match (align:=self._table[0][c].align):
                         case Align.TL | Align.CL | Align.BL:
-                            str2 = str2.ljust(self._table[0][c].col_size)
+                            str_mdy = str_val.ljust(self._table[0][c].col_size)
                         case Align.TC | Align.CC | Align.BC:
-                            str2 = str2.center(self._table[0][c].col_size)
+                            str_mdy = str_val.center(self._table[0][c].col_size)
                         case Align.TR | Align.CR | Align.BR:
-                            str2 = str2.rjust(self._table[0][c].col_size)
+                            str_mdy = str_val.rjust(self._table[0][c].col_size)
                         case _:
-                            tag = self._table[0][c].align
-                            raise SyntaxError(f"The align ID is undefined ({tag}).")
+                            raise SyntaxError(f"The align ID is undefined (align={align}).")
                 else:
-                    str2 = ' ' * self._table[0][c].col_size
-                str_ += f" {str2} {val_sep}"
+                    str_mdy = ' ' * self._table[0][c].col_size
+                str_ += f" {str_mdy} {val_sep}"
             str_ = str_[:-1] + val_edg
             print(str_, file=fp)
 
@@ -382,20 +410,23 @@ class SimpleTable:
             else:
                 row_cnt = row_cnt + 1
 
-            str_ = f"{val_edg}"
+            str_, acc_col_sz = f"{val_edg}", 0 
             for c in range(self.max_col):
-                str2 = str(self._table[r][c].value)
-                match self._table[r][c].align:
+                str_val = str(self._table[r][c].value)
+                acc_col_sz += (col_sz:=self._table[0][c].col_size) + 3
+                match (align:=self._table[r][c].align):
                     case Align.TL | Align.CL | Align.BL:
-                        str2 = str2.ljust(self._table[0][c].col_size)
+                        str_mdy = str_val.ljust(col_sz)
                     case Align.TC | Align.CC | Align.BC:
-                        str2 = str2.center(self._table[0][c].col_size)
+                        str_mdy = str_val.center(col_sz)
                     case Align.TR | Align.CR | Align.BR:
-                        str2 = str2.rjust(self._table[0][c].col_size)
+                        str_mdy = str_val.rjust(col_sz)
                     case _:
-                        tag = self._table[0][c].align
-                        raise SyntaxError(f"The align ID is undefined ({tag}).")
-                str_ += f" {str2} {val_sep}"
+                        raise SyntaxError(f"The align ID is undefined (align={align}).")
+                str_ += f" {str_mdy} "
+                if len(str_val) > col_sz:
+                    str_ += "\n{}".format(' ' * acc_col_sz)
+                str_ += val_sep
             str_ = str_[:-1] + val_edg
             print(str_, file=fp)
 
