@@ -48,17 +48,34 @@ class SimpleTable:
 
     @dataclass
     class Cell:
-        __slot__ = ['value', 'align']
+        """
+        Attributes
+        ----------
+        value   cell value.
+        align   cell value align for table print (only support L/C/R).
+        fs      cell value format string for table print.
+        """
+        __slot__ = ['value', 'align', 'fs']
         value: Any
         align: Align = Align.TL
+        fs:    str   = "{}"
 
     @dataclass
     class HeadCell:
+        """
+        Attributes
+        ----------
+        key             column hash key.
+        title           column title.
+        col_size        column width
+        align           title align for table print (support fully 9 direction).
+        is_col_sz_fix   set true to fix the column width.
+        """
         __slot__ = ['key', 'title', 'col_size', 'align']
-        key          : Any
-        title        : str
-        col_size     : int
-        align        : Align = Align.TL
+        key:           Any
+        title:         str
+        col_size:      int
+        align:         Align = Align.TL
         is_col_sz_fix: bool  = False
 
     @property
@@ -79,10 +96,7 @@ class SimpleTable:
     @property
     def head_cid(self) -> dict:
         """Return header column ID. (type: dict)"""
-        head_dict = {}
-        for i, hcell in enumerate(self._header):
-            head_dict[hcell.key] = i
-        return head_dict
+        return {hcell.key: i for i, hcell in enumerate(self._header)}
 
     @property
     def header(self) -> list:
@@ -241,35 +255,50 @@ class SimpleTable:
         if self.max_col == 0:
             self._header.append(self.HeadCell('title1', 'Title1', 6))
 
-    def set_head_align(self, align: Align):
+    def set_head_attr(self, align: Align=None):
         """
-        Set the align type of a header.
+        Change head attribute over all head cells.
+
+        Arguments
+        ---------
+        align   title align for table print.
+        """
+        for hcell in self._header:
+            if align is not None:
+                hcell.align = align
+
+    def set_row_attr(self, index: int, align: Align=None, fs: str=None):
+        """
+        Set cell attribute for one data row.
+
+        Arguments
+        ---------
+        index   row ID
+        align   cell value align for table print.
+        fs      cell value format string for table print.
         """
         for i in range(self.max_col):
-            self._header[i].align = align
+            if align is not None: 
+                self._table[index][i].align = align
+            if fs is not None: 
+                self._table[index][i].fs = fs
 
-    def set_row_align(self, index: int, align: Align):
+    def set_col_attr(self, index, align: Align=None, fs: str=None):
         """
-        Set the align type of a row.
+        Set cell attribute for one data column.
 
-        The header row support horizontal/vertical align type change.
-        The content rows only support horizontal align type change.
-        Argument index should be a row ID.
-        """
-        for i in range(self.max_col):
-            self._table[index][i].align = align
-
-    def set_col_align(self, index, align: Align):
-        """
-        Set the align type of a column.
-
-        The header row support horizontal/vertical align type change.
-        The content rows only support horizontal align type change.
-        Argument index can be a column ID or key.
+        Arguments
+        ---------
+        index   column ID or hash key
+        align   cell value align for table print.
+        fs      cell value format string for table print.
         """
         cid = self.head_cid[index] if type(index) == str else index
         for i in range(self.max_row):
-            self._table[i][cid].align = align
+            if align is not None:
+                self._table[i][cid].align = align
+            if fs is not None:
+                self._table[i][cid].fs = fs 
 
     def set_col_size(self, index, size: int, is_fix: bool):
         """
@@ -277,19 +306,17 @@ class SimpleTable:
 
         Arguments
         ---------
-        index   column index (column ID or key).
+        index   column ID or hash key
         size    column size (set 0 to use the maximum length of contents).
         is_fix  if is_fix is true, disable auto column size update.
 
         If size is small than the title size, use title size.
         """
         cid = self.head_cid[index] if type(index) == str else index
-        head = self._header[cid]
-        head.is_col_sz_fix = is_fix
+        (head:=self._header[cid]).is_col_sz_fix = is_fix
         title_sz = max([len(x) for x in head.title.split(self._sep)])
-
-        col_size = size
-        if col_size == 0:
+        
+        if (col_size:=size) == 0:
             for i in range(self.max_row):
                 if (sz:=len(self._table[i][cid].value)) > col_size:
                     col_size = sz
@@ -429,7 +456,7 @@ class SimpleTable:
 
             str_, acc_col_sz = f"{val_edg}", 0 
             for c in col_list:
-                str_val = str(self._table[r][c].value)
+                str_val = self._table[r][c].fs.format(self._table[r][c].value)
                 acc_col_sz += (col_sz:=self._header[c].col_size) + 3
                 match (align:=self._table[r][c].align):
                     case Align.TL | Align.CL | Align.BL:
