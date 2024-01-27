@@ -28,7 +28,6 @@ class Align(IntEnum):
 
 class SimpleTable:
     """A Simple Text Table Generator."""
-
     def __init__(self, heads: dict, sep: str='.', rdiv_cnt: Any=math.inf):
         """
         Arguments
@@ -38,6 +37,7 @@ class SimpleTable:
         rdiv_cnt  row divider add between the value of rdiv_cnt (ignore if set 0).
         """
         self._header = []
+        # self._index = {'head': self.HeadCell('', '', 0), 'value': []}
         self._table = []
         self._sep = sep
         self._rdiv_cnt = math.inf if rdiv_cnt == 0 else rdiv_cnt
@@ -46,21 +46,20 @@ class SimpleTable:
             col_size = max([len(x) for x in title.split(self._sep)])
             self._header.append(self.HeadCell(key, title, col_size))
 
-    @dataclass
+    @dataclass(slots=True)
     class Cell:
         """
         Attributes
         ----------
         value   cell value.
-        align   cell value align for table print (only support L/C/R).
-        fs      cell value format string for table print.
+        align   cell value align for table print.         (default=Align.TL)
+        fs      cell value format string for table print. (default="{}")
         """
-        __slot__ = ['value', 'align', 'fs']
         value: Any
         align: Align = Align.TL
         fs:    str   = "{}"
 
-    @dataclass
+    @dataclass(slots=True)
     class HeadCell:
         """
         Attributes
@@ -68,15 +67,62 @@ class SimpleTable:
         key             column hash key.
         title           column title.
         col_size        column width
-        align           title align for table print (support fully 9 direction).
-        is_col_sz_fix   set true to fix the column width.
+        align           title align for table print.      (default=Align.TL)
+        is_col_sz_fix   set true to fix the column width. (default=False)
         """
-        __slot__ = ['key', 'title', 'col_size', 'align']
         key:           Any
         title:         str
         col_size:      int
         align:         Align = Align.TL
         is_col_sz_fix: bool  = False
+
+    # @dataclass(slots=True)
+    # class IndexCell:
+    #     """
+    #     Attributes
+    #     ----------
+    #     key     column hash key.
+    #     title   column title.
+    #     align   title align for table print. (default=Align.TL)
+    #     """
+    #     key:   Any
+    #     title: str
+    #     align: Align = Align.TL
+
+    class Array:
+        """Array wrapper."""
+        def __init__(self, init_array: list=None):
+            """
+            Argument
+            --------
+            init_array  initial array.
+            """
+            self._array = [] if init_array is None else init_array
+        
+        def __repr__(self):
+            return f"{self.__class__.__name__}({self._array})"
+
+        def __getitem__(self, index):
+            """ Return a single entry or the sub-table."""
+            if type(index) is tuple:
+                rid, cid = index
+                if type(rid) is int and type(cid) is int:
+                    return self._array[rid][cid]
+                else:
+                    return Array([rarray[cid] for rarray in self._array[rid]])
+            else:
+                data = self._array[index]
+                return Array(data) if type(data) is list else data
+
+        def __setitem__(self, index, value):
+            """Set entry value."""
+            if type(index) is tuple:
+                self._array[index[0]][index[1]].value = value
+            else:
+                self._array[index].value = value
+
+        def extend(self, array):
+            return Array(self._array + array._array)
 
     @property
     def sep(self) -> str:
@@ -95,7 +141,7 @@ class SimpleTable:
 
     @property
     def head_cid(self) -> dict:
-        """Return header column ID. (type: dict)"""
+        """Return header column ID (type: dict)."""
         return {hcell.key: i for i, hcell in enumerate(self._header)}
 
     @property
@@ -105,56 +151,27 @@ class SimpleTable:
 
     @property
     def max_row(self) -> int:
-        """Return the row number of the table"""
+        """Return the row number of the table."""
         return len(self._table)
 
     @property
     def max_col(self) -> int:
-        """Return the column number of the table"""
+        """Return the column number of the table."""
         return len(self._header)
 
     def __getitem__(self, index):
-        """
-        Return a single entry or the sub-table (type: list)
-
-        Index Format
-        ------------
-        <row_st>[:row_ed][:row_step], [col_st[:col_ed][:col_step]]
-        """
+        """ Return a single entry or the sub-table."""
         if type(index) is tuple:
             rid, cid = index
             if type(rid) is int and type(cid) is int:
                 return self._table[rid][cid]
-            if type(rid) is slice:
-                row_st = 0 if rid.start is None else rid.start
-                row_ed = self.max_row if rid.stop is None else rid.stop
-                row_step = 1 if rid.step is None else rid.step
             else:
-                row_st, row_ed, row_step = rid, rid+1, 1
-            if type(cid) is slice:
-                col_st = 0 if cid.start is None else cid.start
-                col_ed = self.max_col if cid.stop is None else cid.stop
-                col_step = 1 if cid.step is None else cid.step
-            else:
-                col_st, col_ed, col_step = cid, cid+1, 1
+                return self.Array([rarray[cid] for rarray in self._table[rid]])
         else:
-            if type(index) is slice:
-                row_st = 0 if index.start is None else index.start
-                row_ed = self.max_row if index.stop is None else index.stop
-                row_step = 1 if index.step is None else index.step
-            else:
-                row_st, row_ed, row_step = index, index+1, 1
-            col_st, col_ed, col_step = 0, self.max_col, 1
-
-        table = []
-        for rid in range(row_st, row_ed, row_step):
-            table.append(row:=[])
-            for cid in range(col_st, col_ed, col_step):
-                row.append(self._table[rid][cid])
-        return table 
+            return self.Array(self._table[index])
 
     def __setitem__(self, index, value):
-        """Set table value."""
+        """Set entry value."""
         self._table[index[0]][index[1]].value = value
 
     def update_key(self, cur_key, new_key):
@@ -163,12 +180,15 @@ class SimpleTable:
             raise IndexError("The new key is existed.")
         self._header[self.head_cid[cur_key]].key = new_key
 
-    def add_row(self, data: list, align: int=Align.NONE):
+    def add_row(self, data: list, align: int=Align.NONE, init: Any=''):
         """
         Add a new row.
 
-        The header row support horizontal/vertical align type change.
-        The content rows only support horizontal align type change.
+        Arguments
+        ---------
+        data    value list.
+        align   cell align.
+        init    initial value (set initial value if len(row) > len(data)).
         """
         data_size = len(data)
         self._table.append(row:=[])
@@ -187,14 +207,20 @@ class SimpleTable:
                         and size > self._header[i].col_size):
                     self._header[i].col_size = size
             else:
-                row.append(self.Cell("", align=align_))
+                row.append(self.Cell(init, align=align_))
 
-    def add_col(self, key, title: str, data: list, align: int=Align.TL):
+    def add_col(self, key, title: str, data: list, align: int=Align.TL, 
+                init: Any=''):
         """
         Add a new column.
-        
-        The header row support horizontal/vertical align type change.
-        The content rows only support horizontal align type change.
+
+        Arguments
+        ---------
+        key     column hash key.
+        title   column title.
+        data    value list.
+        align   cell align.
+        init    initial value (set initial value if len(row) > len(data)).
         """
         data_size = len(data)
         col_size = max([len(x) for x in title.split(self._sep)])
@@ -206,7 +232,7 @@ class SimpleTable:
                 if size > self._header[-1].col_size:
                     self._header[-1].col_size = size
             else:
-                self._table[i].append(self.Cell('', align=align))
+                self._table[i].append(self.Cell(init, align=align))
 
     def swap_row(self, index1: int, index2: int):
         """
@@ -224,8 +250,8 @@ class SimpleTable:
 
         Argument index1, index2 can be column IDs or keys.
         """
-        cid1 = self.head_cid[index1] if type(index1) == str else index1
-        cid2 = self.head_cid[index2] if type(index2) == str else index2
+        cid1 = self.head_cid[index1] if type(index1) is str else index1
+        cid2 = self.head_cid[index2] if type(index2) is str else index2
         self._header[cid1], self._header[cid2] = (
             self._header[cid2], self._header[cid1])
         for i in range(self.max_row):
@@ -235,7 +261,7 @@ class SimpleTable:
 
     def del_row(self, index: int):
         """
-        Delete the specific row
+        Delete the specific row.
 
         Argument index should be a row ID
         """
@@ -248,7 +274,7 @@ class SimpleTable:
 
         Argument index can be a column ID or key.
         """
-        cid = self.head_cid[index] if type(index) == str else index
+        cid = self.head_cid[index] if type(index) is str else index
         del self._header[cid]
         for i in range(self.max_row):
             del self._table[i][cid]
@@ -293,7 +319,7 @@ class SimpleTable:
         align   cell value align for table print.
         fs      cell value format string for table print.
         """
-        cid = self.head_cid[index] if type(index) == str else index
+        cid = self.head_cid[index] if type(index) is str else index
         for i in range(self.max_row):
             if align is not None:
                 self._table[i][cid].align = align
@@ -302,7 +328,7 @@ class SimpleTable:
 
     def set_col_size(self, index, size: int, is_fix: bool):
         """
-        Set column size
+        Set column size.
 
         Arguments
         ---------
@@ -312,7 +338,7 @@ class SimpleTable:
 
         If size is small than the title size, use title size.
         """
-        cid = self.head_cid[index] if type(index) == str else index
+        cid = self.head_cid[index] if type(index) is str else index
         (head:=self._header[cid]).is_col_sz_fix = is_fix
         title_sz = max([len(x) for x in head.title.split(self._sep)])
         
@@ -354,7 +380,7 @@ class SimpleTable:
 
         Argument index can be row IDs or keys.
         """
-        cid = self.head_cid[index] if type(index) == str else index
+        cid = self.head_cid[index] if type(index) is str else index
         col = []
         for i in range(self.max_row):
             col.append(self._table[i][cid].value)
