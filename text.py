@@ -27,6 +27,366 @@ class Align(IntEnum):
     BL, BC, BR = 0x31, 0x32, 0x33
 
 
+@dataclass(slots=True)
+class Cell:
+    """
+    Attributes
+    ----------
+    value   data value.
+    align   data align for table print.       (default=Align.TL)
+    is_sep  string separate by the separator. (default=False)
+    fs      format string for table print.    (default="{}")
+    """
+    value:  Any
+    align:  Align = Align.TL
+    is_sep: bool  = False
+    fs:     str   = "{}"
+
+
+@dataclass(slots=True)
+class HeadCell:
+    """
+    Attributes
+    ----------
+    key     column hash key.
+    title   column title.
+    width   column width.                     (default=0)
+    align   title align for table print.      (default=Align.TL)
+    is_sep  string separate by the separator. (default=True)
+
+    If width is 0, use the maximum length of data or title as the column 
+    size when print the table.
+    """
+    key:    Any
+    title:  str
+    width:  int   = 0
+    align:  Align = Align.TL
+    is_sep: bool  = True
+
+
+class Array:
+    """Array wrapper."""
+    def __init__(self, init_array: list=None, is_pure: bool=False):
+        if init_array is None:
+            self._array = []
+        elif not is_pure:
+            self._array = init_array
+        else:
+            self._array = [Cell(value) for value in init_array]
+    
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self._array})"
+
+    def __add__(self, that):
+        if (ax1:=self.shape) == (ax2:=that.shape):
+            new_array = self.__class__(copy.deepcopy(self._array))
+            if len(ax1) == 1:
+                for c, cell in enumerate(new_array._array):
+                    cell.value += that._array[c].value
+            else:
+                for r, row in enumerate(new_array._array):
+                    for c, cell in enumerate(row):
+                        cell.value += that._array[r][c].value
+            return new_array 
+        else:
+            msg = f"Shapes difference. (self:{ax1}, that:{ax2})"
+            raise ValueError(msg)
+
+    def __sub__(self, that):
+        if (ax1:=self.shape) == (ax2:=that.shape):
+            new_array = self.__class__(copy.deepcopy(self._array))
+            if len(ax1) == 1:
+                for c, cell in enumerate(new_array._array):
+                    cell.value -= that._array[c].value
+            else:
+                for r, row in enumerate(new_array._array):
+                    for c, cell in enumerate(row):
+                        cell.value -= that._array[r][c].value
+            return new_array 
+        else:
+            msg = f"Shapes difference. (self:{ax1}, that:{ax2})"
+            raise ValueError(msg)
+
+    def __mul__(self, that):
+        if (ax1:=self.shape) == (ax2:=that.shape):
+            new_array = self.__class__(copy.deepcopy(self._array))
+            if len(ax1) == 1:
+                for c, cell in enumerate(new_array._array):
+                    cell.value *= that._array[c].value
+            else:
+                for r, row in enumerate(new_array._array):
+                    for c, cell in enumerate(row):
+                        cell.value *= that._array[r][c].value
+            return new_array 
+        else:
+            msg = f"Shapes difference. (self:{ax1}, that:{ax2})"
+            raise ValueError(msg)
+
+    def __truediv__(self, that):
+        if (ax1:=self.shape) == (ax2:=that.shape):
+            new_array = self.__class__(copy.deepcopy(self._array))
+            if len(ax1) == 1:
+                for c, cell in enumerate(new_array._array):
+                    cell.value /= that._array[c].value
+            else:
+                for r, row in enumerate(new_array._array):
+                    for c, cell in enumerate(row):
+                        cell.value /= that._array[r][c].value
+            return new_array 
+        else:
+            msg = f"Shapes difference. (self:{ax1}, that:{ax2})"
+            raise ValueError(msg)
+
+    def _get_array(self, index):
+        """ Return an entry or a sub-table."""
+        if type(index) is tuple:
+            rid, cid = index
+            if type(rid) is int:
+                return self._array[rid][cid]
+            else:
+                return [rarray[cid] for rarray in self._array[rid]]
+        else:
+            return self._array[index]
+
+    def __getitem__(self, index):
+        """ Return an entry or a sub-table."""
+        array = self._get_array(index)
+        return self.__class__(array) if type(array) is list else array
+
+    def __setitem__(self, index, that):
+        """Set entry values."""
+        array = self._get_array(index)
+        if (ax1:=self._shape(array)) == (ax2:=that.shape):
+            if len(ax1) == 1:
+                for c, cell in enumerate(array):
+                    cell.value = that._array[c].value
+            else:
+                for r, row in enumerate(array):
+                    for c, cell in enumerate(row):
+                        cell.value = that._array[r][c].value
+        else:
+            msg = f"Shapes difference. (self:{ax1}, that:{ax2})"
+            raise ValueError(msg)
+
+    def _shape(self, array: list) -> list:
+        """Return the shape of the array. (format=([row,] col))"""
+        if type(array[0]) is list:
+            return (len(array), len(array[0]))
+        else:
+            return (len(array), )
+
+    @property
+    def shape(self) -> list:
+        """Return the shape of the array. (format=(row, col))"""
+        return self._shape(self._array)
+
+    @property
+    def value(self) -> list:
+        """Return the value list."""
+        vlist = []
+        for a1 in self._array:
+            vlist.append([a2.value for a2 in a1] if type(a1) is list 
+                         else a1.value)
+        return vlist
+
+    @value.setter
+    def value(self, vlist: list):
+        """Set cell values."""
+        if (ax1:=self.shape) == (ax2:=self._shape(vlist)):
+            if len(ax1) == 1:
+                for c, cell in enumerate(self._array):
+                    cell.value = vlist[c]
+            else:
+                for r, row in enumerate(self._array):
+                    for c, cell in enumerate(row):
+                        cell.value = vlist[r][c]
+        else:
+            msg = f"Shapes difference. (self:{ax1}, vlist:{ax2})"
+            raise ValueError(msg)
+
+    @property
+    def align(self) -> list:
+        """Return the align list."""
+        vlist = []
+        for a1 in self._array:
+            vlist.append([a2.align for a2 in a1] if type(a1) is list 
+                         else a1.align)
+        return vlist
+
+    @align.setter
+    def align(self, vlist: list):
+        """Set cell aligns."""
+        if (ax1:=self.shape) == (ax2:=self._shape(vlist)):
+            if len(ax1) == 1:
+                for c, cell in enumerate(self._array):
+                    cell.align = vlist[c]
+            else:
+                for r, row in enumerate(self._array):
+                    for c, cell in enumerate(row):
+                        cell.align = vlist[r][c]
+        else:
+            msg = f"Shapes difference. (self:{ax1}, vlist:{ax2})"
+            raise ValueError(msg)
+
+    @property
+    def is_sep(self) -> list:
+        """Return the is_sep list."""
+        vlist = []
+        for a1 in self._array:
+            vlist.append([a2.is_sep for a2 in a1] if type(a1) is list 
+                         else a1.is_sep)
+        return vlist
+
+    @is_sep.setter
+    def is_sep(self, vlist: list):
+        """Set cell is_seps."""
+        if (ax1:=self.shape) == (ax2:=self._shape(vlist)):
+            if len(ax1) == 1:
+                for c, cell in enumerate(self._array):
+                    cell.is_sep = vlist[c]
+            else:
+                for r, row in enumerate(self._array):
+                    for c, cell in enumerate(row):
+                        cell.is_sep = vlist[r][c]
+        else:
+            msg = f"Shapes difference. (self:{ax1}, vlist:{ax2})"
+            raise ValueError(msg)
+
+    @property
+    def fs(self) -> list:
+        """Return the fs list."""
+        vlist = []
+        for a1 in self._array:
+            vlist.append([a2.fs for a2 in a1] if type(a1) is list 
+                         else a1.fs)
+        return vlist
+
+    @fs.setter
+    def fs(self, vlist: list):
+        """Set cell fss."""
+        if (ax1:=self.shape) == (ax2:=self._shape(vlist)):
+            if len(ax1) == 1:
+                for c, cell in enumerate(self._array):
+                    cell.fs = vlist[c]
+            else:
+                for r, row in enumerate(self._array):
+                    for c, cell in enumerate(row):
+                        cell.fs = vlist[r][c]
+        else:
+            msg = f"Shapes difference. (self:{ax1}, vlist:{ax2})"
+            raise ValueError(msg)
+
+
+class Index:
+    """Index wrapper."""
+    def __init__(self, init_array: list=None):
+        self._array = [] if init_array is None else init_array
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self._array})"
+
+    def __getitem__(self, index):
+        """ Return an entry or a sub-table."""
+        array = self._array[index]
+        return self.__class__(array) if type(array) is list else array
+
+    @property
+    def length(self) -> int:
+        """Return the length of the index."""
+        return len(self._array)
+
+    @property
+    def id(self) -> dict:
+        """Return key/ID pair by the dictionary."""
+        vdict = {}
+        for i, cell in enumerate(self._array):
+            key = cell.key
+            if type(key) is not str:
+                msg = f"Hash key must be the string type (id[{i}]={key})."
+                raise KeyError(msg)
+            elif key in vdict:
+                msg = f"Hash key repeat (id[{vdict[key]}]==id[{i}])."
+                raise KeyError(msg)
+            else:
+                vdict[key] = i
+        return vdict 
+
+    @property
+    def key(self) -> list:
+        """Get hash keys of the index."""
+        return [x.key for x in self._array]
+
+    @key.setter
+    def key(self, vlist: list):
+        """Set index keys"""
+        if (sz1:=len(self._array)) == (sz2:=len(vlist)):
+            for c, cell in enumerate(self._array):
+                cell.key = vlist[c]
+        else:
+            msg = f"Shapes difference. (self:{ax1}, vlist:{ax2})"
+            raise ValueError(msg)
+
+    @property
+    def title(self) -> list:
+        """Get titles of the index."""
+        return [x.title for x in self._array]
+
+    @title.setter
+    def title(self, vlist: list):
+        """Set index titles"""
+        if (sz1:=len(self._array)) == (sz2:=len(vlist)):
+            for c, cell in enumerate(self._array):
+                cell.title = vlist[c]
+        else:
+            msg = f"Shapes difference. (self:{ax1}, vlist:{ax2})"
+            raise ValueError(msg)
+
+    @property
+    def width(self) -> list:
+        """Get titles of the index."""
+        return [x.width for x in self._array]
+
+    @width.setter
+    def width(self, vlist: list):
+        """Set index titles"""
+        if (sz1:=len(self._array)) == (sz2:=len(vlist)):
+            for c, cell in enumerate(self._array):
+                cell.width = vlist[c]
+        else:
+            msg = f"Shapes difference. (self:{ax1}, vlist:{ax2})"
+            raise ValueError(msg)
+
+    @property
+    def align(self) -> list:
+        """Get titles of the index."""
+        return [x.align for x in self._array]
+
+    @align.setter
+    def align(self, vlist: list):
+        """Set index titles"""
+        if (sz1:=len(self._array)) == (sz2:=len(vlist)):
+            for c, cell in enumerate(self._array):
+                cell.align = vlist[c]
+        else:
+            msg = f"Shapes difference. (self:{ax1}, vlist:{ax2})"
+            raise ValueError(msg)
+
+    @property
+    def is_sep(self) -> list:
+        """Get titles of the index."""
+        return [x.is_sep for x in self._array]
+
+    @is_sep.setter
+    def is_sep(self, vlist: list):
+        """Set index titles"""
+        if (sz1:=len(self._array)) == (sz2:=len(vlist)):
+            for c, cell in enumerate(self._array):
+                cell.is_sep = vlist[c]
+        else:
+            msg = f"Shapes difference. (self:{ax1}, vlist:{ax2})"
+            raise ValueError(msg)
+
+
 class SimpleTable:
     """A Simple Text Table Generator."""
     def __init__(self, heads: list, sep: str='.', rdiv_cnt: Any=math.inf, 
@@ -43,7 +403,7 @@ class SimpleTable:
                   column width.
                     # If any data row is separated, force is_partp=True.
         """
-        self._index_head = self.HeadCell(None, '')
+        self._index_head = HeadCell(None, '')
         self._index = []
         self._header = []
         self._table = []
@@ -52,358 +412,7 @@ class SimpleTable:
         self.is_partp = is_partp
 
         for i, (key, title) in enumerate(heads):
-            self._header.append(self.HeadCell(key, title))
-
-    @dataclass(slots=True)
-    class Cell:
-        """
-        Attributes
-        ----------
-        value   data value.
-        align   data align for table print.       (default=Align.TL)
-        is_sep  string separate by the separator. (default=False)
-        fs      format string for table print.    (default="{}")
-        """
-        value:  Any
-        align:  Align = Align.TL
-        is_sep: bool  = False
-        fs:     str   = "{}"
-
-    @dataclass(slots=True)
-    class HeadCell:
-        """
-        Attributes
-        ----------
-        key     column hash key.
-        title   column title.
-        width   column width.                     (default=0)
-        align   title align for table print.      (default=Align.TL)
-        is_sep  string separate by the separator. (default=True)
-
-        If width is 0, use the maximum length of data or title as the column 
-        size when print the table.
-        """
-        key:    Any
-        title:  str
-        width:  int   = 0
-        align:  Align = Align.TL
-        is_sep: bool  = True
-
-    class Array:
-        """Array wrapper."""
-        def __init__(self, init_array: list=None):
-            self._array = [] if init_array is None else init_array
-        
-        def __repr__(self):
-            return f"{self.__class__.__name__}({self._array})"
-
-        def __add__(self, that):
-            if (ax1:=self.shape) == (ax2:=that.shape):
-                new_array = self.__class__(copy.deepcopy(self._array))
-                if len(ax1) == 1:
-                    for c, cell in enumerate(new_array._array):
-                        cell.value += that._array[c].value
-                else:
-                    for r, row in enumerate(new_array._array):
-                        for c, cell in enumerate(row):
-                            cell.value += that._array[r][c].value
-                return new_array 
-            else:
-                msg = f"Shapes difference. (self:{ax1}, that:{ax2})"
-                raise ValueError(msg)
-
-        def __sub__(self, that):
-            if (ax1:=self.shape) == (ax2:=that.shape):
-                new_array = self.__class__(copy.deepcopy(self._array))
-                if len(ax1) == 1:
-                    for c, cell in enumerate(new_array._array):
-                        cell.value -= that._array[c].value
-                else:
-                    for r, row in enumerate(new_array._array):
-                        for c, cell in enumerate(row):
-                            cell.value -= that._array[r][c].value
-                return new_array 
-            else:
-                msg = f"Shapes difference. (self:{ax1}, that:{ax2})"
-                raise ValueError(msg)
-
-        def __mul__(self, that):
-            if (ax1:=self.shape) == (ax2:=that.shape):
-                new_array = self.__class__(copy.deepcopy(self._array))
-                if len(ax1) == 1:
-                    for c, cell in enumerate(new_array._array):
-                        cell.value *= that._array[c].value
-                else:
-                    for r, row in enumerate(new_array._array):
-                        for c, cell in enumerate(row):
-                            cell.value *= that._array[r][c].value
-                return new_array 
-            else:
-                msg = f"Shapes difference. (self:{ax1}, that:{ax2})"
-                raise ValueError(msg)
-
-        def __truediv__(self, that):
-            if (ax1:=self.shape) == (ax2:=that.shape):
-                new_array = self.__class__(copy.deepcopy(self._array))
-                if len(ax1) == 1:
-                    for c, cell in enumerate(new_array._array):
-                        cell.value /= that._array[c].value
-                else:
-                    for r, row in enumerate(new_array._array):
-                        for c, cell in enumerate(row):
-                            cell.value /= that._array[r][c].value
-                return new_array 
-            else:
-                msg = f"Shapes difference. (self:{ax1}, that:{ax2})"
-                raise ValueError(msg)
-
-        def _get_array(self, index):
-            """ Return an entry or a sub-table."""
-            if type(index) is tuple:
-                rid, cid = index
-                if type(rid) is int:
-                    return self._array[rid][cid]
-                else:
-                    return [rarray[cid] for rarray in self._array[rid]]
-            else:
-                return self._array[index]
-
-        def __getitem__(self, index):
-            """ Return an entry or a sub-table."""
-            array = self._get_array(index)
-            return self.__class__(array) if type(array) is list else array
-
-        def __setitem__(self, index, that):
-            """Set entry values."""
-            array = self._get_array(index)
-            if (ax1:=self._shape(array)) == (ax2:=that.shape):
-                if len(ax1) == 1:
-                    for c, cell in enumerate(array):
-                        cell.value = that._array[c].value
-                else:
-                    for r, row in enumerate(array):
-                        for c, cell in enumerate(row):
-                            cell.value = that._array[r][c].value
-            else:
-                msg = f"Shapes difference. (self:{ax1}, that:{ax2})"
-                raise ValueError(msg)
-
-        def _shape(self, array: list) -> list:
-            """Return the shape of the array. (format=([row,] col))"""
-            if type(array[0]) is list:
-                return (len(array), len(array[0]))
-            else:
-                return (len(array), )
-
-        @property
-        def shape(self) -> list:
-            """Return the shape of the array. (format=(row, col))"""
-            return self._shape(self._array)
-
-        @property
-        def value(self) -> list:
-            """Return the value list."""
-            vlist = []
-            for a1 in self._array:
-                vlist.append([a2.value for a2 in a1] if type(a1) is list 
-                             else a1.value)
-            return vlist
-
-        @value.setter
-        def value(self, vlist: list):
-            """Set cell values."""
-            if (ax1:=self.shape) == (ax2:=self._shape(vlist)):
-                if len(ax1) == 1:
-                    for c, cell in enumerate(self._array):
-                        cell.value = vlist[c]
-                else:
-                    for r, row in enumerate(self._array):
-                        for c, cell in enumerate(row):
-                            cell.value = vlist[r][c]
-            else:
-                msg = f"Shapes difference. (self:{ax1}, vlist:{ax2})"
-                raise ValueError(msg)
-
-        @property
-        def align(self) -> list:
-            """Return the align list."""
-            vlist = []
-            for a1 in self._array:
-                vlist.append([a2.align for a2 in a1] if type(a1) is list 
-                             else a1.align)
-            return vlist
-
-        @align.setter
-        def align(self, vlist: list):
-            """Set cell aligns."""
-            if (ax1:=self.shape) == (ax2:=self._shape(vlist)):
-                if len(ax1) == 1:
-                    for c, cell in enumerate(self._array):
-                        cell.align = vlist[c]
-                else:
-                    for r, row in enumerate(self._array):
-                        for c, cell in enumerate(row):
-                            cell.align = vlist[r][c]
-            else:
-                msg = f"Shapes difference. (self:{ax1}, vlist:{ax2})"
-                raise ValueError(msg)
-
-        @property
-        def is_sep(self) -> list:
-            """Return the is_sep list."""
-            vlist = []
-            for a1 in self._array:
-                vlist.append([a2.is_sep for a2 in a1] if type(a1) is list 
-                             else a1.is_sep)
-            return vlist
-
-        @is_sep.setter
-        def is_sep(self, vlist: list):
-            """Set cell is_seps."""
-            if (ax1:=self.shape) == (ax2:=self._shape(vlist)):
-                if len(ax1) == 1:
-                    for c, cell in enumerate(self._array):
-                        cell.is_sep = vlist[c]
-                else:
-                    for r, row in enumerate(self._array):
-                        for c, cell in enumerate(row):
-                            cell.is_sep = vlist[r][c]
-            else:
-                msg = f"Shapes difference. (self:{ax1}, vlist:{ax2})"
-                raise ValueError(msg)
-
-        @property
-        def fs(self) -> list:
-            """Return the fs list."""
-            vlist = []
-            for a1 in self._array:
-                vlist.append([a2.fs for a2 in a1] if type(a1) is list 
-                             else a1.fs)
-            return vlist
-
-        @fs.setter
-        def fs(self, vlist: list):
-            """Set cell fss."""
-            if (ax1:=self.shape) == (ax2:=self._shape(vlist)):
-                if len(ax1) == 1:
-                    for c, cell in enumerate(self._array):
-                        cell.fs = vlist[c]
-                else:
-                    for r, row in enumerate(self._array):
-                        for c, cell in enumerate(row):
-                            cell.fs = vlist[r][c]
-            else:
-                msg = f"Shapes difference. (self:{ax1}, vlist:{ax2})"
-                raise ValueError(msg)
-
-    class Index:
-        """Index wrapper."""
-        def __init__(self, init_array: list=None):
-            self._array = [] if init_array is None else init_array
-
-        def __repr__(self):
-            return f"{self.__class__.__name__}({self._array})"
-
-        def __getitem__(self, index):
-            """ Return an entry or a sub-table."""
-            array = self._array[index]
-            return self.__class__(array) if type(array) is list else array
-
-        @property
-        def length(self) -> int:
-            """Return the length of the index."""
-            return len(self._array)
-
-        @property
-        def id(self) -> dict:
-            """Return key/ID pair by the dictionary."""
-            vdict = {}
-            for i, cell in enumerate(self._array):
-                key = cell.key
-                if type(key) is not str:
-                    msg = f"Hash key must be the string type (id[{i}]={key})."
-                    raise KeyError(msg)
-                elif key in vdict:
-                    msg = f"Hash key repeat (id[{vdict[key]}]==id[{i}])."
-                    raise KeyError(msg)
-                else:
-                    vdict[key] = i
-            return vdict 
-
-        @property
-        def key(self) -> list:
-            """Get hash keys of the index."""
-            return [x.key for x in self._array]
-
-        @key.setter
-        def key(self, vlist: list):
-            """Set index keys"""
-            if (sz1:=len(self._array)) == (sz2:=len(vlist)):
-                for c, cell in enumerate(self._array):
-                    cell.key = vlist[c]
-            else:
-                msg = f"Shapes difference. (self:{ax1}, vlist:{ax2})"
-                raise ValueError(msg)
-
-        @property
-        def title(self) -> list:
-            """Get titles of the index."""
-            return [x.title for x in self._array]
-
-        @title.setter
-        def title(self, vlist: list):
-            """Set index titles"""
-            if (sz1:=len(self._array)) == (sz2:=len(vlist)):
-                for c, cell in enumerate(self._array):
-                    cell.title = vlist[c]
-            else:
-                msg = f"Shapes difference. (self:{ax1}, vlist:{ax2})"
-                raise ValueError(msg)
-
-        @property
-        def width(self) -> list:
-            """Get titles of the index."""
-            return [x.width for x in self._array]
-
-        @width.setter
-        def width(self, vlist: list):
-            """Set index titles"""
-            if (sz1:=len(self._array)) == (sz2:=len(vlist)):
-                for c, cell in enumerate(self._array):
-                    cell.width = vlist[c]
-            else:
-                msg = f"Shapes difference. (self:{ax1}, vlist:{ax2})"
-                raise ValueError(msg)
-
-        @property
-        def align(self) -> list:
-            """Get titles of the index."""
-            return [x.align for x in self._array]
-
-        @align.setter
-        def align(self, vlist: list):
-            """Set index titles"""
-            if (sz1:=len(self._array)) == (sz2:=len(vlist)):
-                for c, cell in enumerate(self._array):
-                    cell.align = vlist[c]
-            else:
-                msg = f"Shapes difference. (self:{ax1}, vlist:{ax2})"
-                raise ValueError(msg)
-
-        @property
-        def is_sep(self) -> list:
-            """Get titles of the index."""
-            return [x.is_sep for x in self._array]
-
-        @is_sep.setter
-        def is_sep(self, vlist: list):
-            """Set index titles"""
-            if (sz1:=len(self._array)) == (sz2:=len(vlist)):
-                for c, cell in enumerate(self._array):
-                    cell.is_sep = vlist[c]
-            else:
-                msg = f"Shapes difference. (self:{ax1}, vlist:{ax2})"
-                raise ValueError(msg)
+            self._header.append(HeadCell(key, title))
 
     @property
     def sep(self) -> str:
@@ -423,59 +432,17 @@ class SimpleTable:
     @property
     def header(self) -> list:
         """Return the head list."""
-        return self.Index(self._header.copy())
+        return Index(self._header.copy())
 
     @property
     def index(self) -> list:
         """Return the index list."""
-        return self.Index(self._index.copy())
+        return Index(self._index.copy())
 
     @property
     def index_head(self) -> HeadCell:
         """Return the index head cell."""
         return self._index_head
-
-    # @property
-    # def header_cid(self) -> dict:
-    #     """Return header column IDs."""
-    #     head_dict = {}
-    #     for i, cell in enumerate(self._header):
-    #         key = cell.key
-    #         if key is None:
-    #             raise KeyError(f"None type can be a direction key (cid={i}).")
-    #         elif key in head_dict:
-    #             msg = f"Hash key repeat (cid1={head_dict[key]}, cid2={i})."
-    #             raise KeyError(msg)
-    #         else:
-    #             head_dict[key] = i
-    #     return head_dict
-
-    # @property
-    # def index_rid(self) -> dict:
-    #     """Return index row IDs."""
-    #     index_dict = {}
-    #     for i, cell in enumerate(self._index):
-    #         key = cell.key
-    #         if key is None:
-    #             raise KeyError(f"None type can be a direction key (rid={i}).")
-    #         elif key in index_dict:
-    #             msg = f"Hash key repeat (rid1={index_dict[key]}, rid2={i})."
-    #             raise KeyError(msg)
-    #         else:
-    #             index_dict[key] = i
-    #     return index_dict
-
-    # def update_head_key(self, cur_key, new_key):
-    #     """Update the hash key of the header."""
-    #     if new_key in self.header.id:
-    #         raise IndexError("The new key is existed.")
-    #     self._header[self.header.id[cur_key]].key = new_key
-
-    # def update_index_key(self, cur_key, new_key):
-    #     """Update the hash key of the index."""
-    #     if new_key in self.index.id:
-    #         raise IndexError("The new key is existed.")
-    #     self._index[self.index.id[cur_key]].key = new_key
 
     @property
     def max_row(self) -> int:
@@ -489,11 +456,11 @@ class SimpleTable:
 
     def __getitem__(self, index):
         """ Return an entry or a sub-table."""
-        return self.Array(self._table).__getitem__(index)
+        return Array(self._table).__getitem__(index)
 
     def __setitem__(self, index, that):
         """Set entry values."""
-        self.Array(self._table).__setitem__(index, that)
+        Array(self._table).__setitem__(index, that)
 
     def add_row(self, key, title: str, data: list, align: int=Align.NONE, 
                 init: Any=''):
@@ -509,7 +476,7 @@ class SimpleTable:
         init   initial value (set initial value if len(row) > len(data)).
         """
         data_size = len(data)
-        self._index.append(self.HeadCell(key, title))
+        self._index.append(HeadCell(key, title))
         self._table.append(row:=[])
         for i in range(self.max_col):
             if self.max_row == 1:
@@ -519,7 +486,7 @@ class SimpleTable:
             else:
                 align_ = align
             value = data[i] if i < data_size else init
-            row.append(self.Cell(value, align=align_))
+            row.append(Cell(value, align=align_))
 
     def add_col(self, key, title: str, data: list, align: int=Align.TL, 
                 init: Any=''):
@@ -535,10 +502,10 @@ class SimpleTable:
         init   initial value (set initial value if len(row) > len(data)).
         """
         data_size = len(data)
-        self._header.append(self.HeadCell(key, title))
+        self._header.append(HeadCell(key, title))
         for i in range(self.max_row):
             value = data[i] if i < data_size else init
-            self._table[i].append(self.Cell(value, align=align))
+            self._table[i].append(Cell(value, align=align))
 
     def swap_row(self, index1, index2):
         """
@@ -599,96 +566,95 @@ class SimpleTable:
         for i in range(self.max_row):
             del self._table[i][cid]
         if self.max_col == 0:
-            self._header.append(self.HeadCell('title1', 'Title1'))
+            self._header.append(HeadCell('title1', 'Title1'))
 
-    # def set_head_attr(self, width: int=None, align: Align=None, 
-    #                   is_sep: bool=None):
-    #     """
-    #     Change head attribute over all head cells.
+    def set_head_attr(self, width: int=None, align: Align=None,
+                      is_sep: bool=None):
+        """
+        Change head attribute over all head cells.
 
-    #     Arguments
-    #     ---------
-    #     width   column width.
-    #     align   title align for table print.
-    #     is_sep  string separate by the separator.
-    #     """
-    #     for cell in self._header:
-    #         if width is not None:
-    #             cell.width = width
-    #         if align is not None:
-    #             cell.align = align
-    #         if is_sep is not None:
-    #             cell.is_sep = is_sep
+        Arguments
+        ---------
+        width   column width.
+        align   title align for table print.
+        is_sep  string separate by the separator.
+        """
+        for cell in self._header:
+            if width is not None:
+                cell.width = width
+            if align is not None:
+                cell.align = align
+            if is_sep is not None:
+                cell.is_sep = is_sep
 
-    # def set_index_attr(self, width: int=None, align: Align=None, 
-    #                    is_sep: bool=None):
-    #     """
-    #     Change index attribute over all index cells.
+    def set_index_attr(self, width: int=None, align: Align=None,
+                       is_sep: bool=None):
+        """
+        Change index attribute over all index cells.
 
-    #     Arguments
-    #     ---------
-    #     width   column width.
-    #     align   title align for table print.
-    #     is_sep  string separate by the separator.
-    #     """
-    #     if width is not None:
-    #         self._index_head.width = width
-    #     for cell in self._index:
-    #         if align is not None:
-    #             cell.align = align
-    #         if is_sep is not None:
-    #             cell.is_sep = is_sep
+        Arguments
+        ---------
+        width   column width.
+        align   title align for table print.
+        is_sep  string separate by the separator.
+        """
+        if width is not None:
+            self._index_head.width = width
+        for cell in self._index:
+            if align is not None:
+                cell.align = align
+            if is_sep is not None:
+                cell.is_sep = is_sep
 
-    # def set_row_attr(self, index: int, align: Align=None, is_sep: bool=None, 
-    #                  fs: str=None):
-    #     """
-    #     Set cell attribute for one data row.
+    def set_row_attr(self, index: int, align: Align=None, is_sep: bool=None,
+                     fs: str=None):
+        """
+        Set cell attribute for one data row.
 
-    #     Arguments
-    #     ---------
-    #     index   row ID.
-    #     align   data align for table print.
-    #     is_sep  string separate by the separator.
-    #     fs      format string for table print.
-    #     """
-    #     for i in range(self.max_col):
-    #         if align is not None: 
-    #             self._table[index][i].align = align
-    #         if is_sep is not None: 
-    #             self._table[index][i].is_sep = is_sep
-    #         if fs is not None: 
-    #             self._table[index][i].fs = fs
+        Arguments
+        ---------
+        index   row ID.
+        align   data align for table print.
+        is_sep  string separate by the separator.
+        fs      format string for table print.
+        """
+        for i in range(self.max_col):
+            if align is not None:
+                self._table[index][i].align = align
+            if is_sep is not None:
+                self._table[index][i].is_sep = is_sep
+            if fs is not None:
+                self._table[index][i].fs = fs
 
-    # def set_col_attr(self, index, width: int=None, align: Align=None, 
-    #                  is_sep: bool=None, fs: str=None):
-    #     """
-    #     Set cell attribute for one data column.
+    def set_col_attr(self, index, width: int=None, align: Align=None,
+                     is_sep: bool=None, fs: str=None):
+        """
+        Set cell attribute for one data column.
 
-    #     Arguments
-    #     ---------
-    #     index   column hash key or ID.
-    #     width   column width.
-    #     align   data align for table print.
-    #     is_sep  string separate by the separator.
-    #     fs      format string for table print.
+        Arguments
+        ---------
+        index   column hash key or ID.
+        width   column width.
+        align   data align for table print.
+        is_sep  string separate by the separator.
+        fs      format string for table print.
 
-    #     If width is 0, use the maximum length of data or title as the column 
-    #     size when print the table. If the specific size is small than the 
-    #     length of title, use the title length as the column width.
-    #     """
-    #     cid = self.header.id[index] if type(index) is str else index
-    #     if width is not None:
-    #         self._header[cid].width = width
-    #     for i in range(self.max_row):
-    #         if align is not None:
-    #             self._table[i][cid].align = align
-    #         if is_sep is not None:
-    #             self._table[i][cid].is_sep = is_sep
-    #         if fs is not None:
-    #             self._table[i][cid].fs = fs 
+        If width is 0, use the maximum length of data or title as the column
+        size when print the table. If the specific size is small than the
+        length of title, use the title length as the column width.
+        """
+        cid = self.header.id[index] if type(index) is str else index
+        if width is not None:
+            self._header[cid].width = width
+        for i in range(self.max_row):
+            if align is not None:
+                self._table[i][cid].align = align
+            if is_sep is not None:
+                self._table[i][cid].is_sep = is_sep
+            if fs is not None:
+                self._table[i][cid].fs = fs
 
-    def print_table(self, fp=None, sid: int=1, column: list=None, 
-                    row: list=None):
+    def print(self, fp=None, sid: int=1, column: list=None, row: list=None):
         """
         Print the table.
 
