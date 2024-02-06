@@ -29,10 +29,10 @@ class Align(IntEnum):
 
 @dataclass(slots=True)
 class Border:
-    top:    bool=True
-    bottom: bool=True
-    left:   bool=True
-    right:  bool=True
+    top:    bool = True
+    bottom: bool = True
+    left:   bool = True
+    right:  bool = True
 
 
 @dataclass(slots=True)
@@ -47,10 +47,26 @@ class Cell:
     border  border setting
     """
     value:  Any
-    align:  Align = Align.TL
-    is_sep: bool  = False
-    fs:     str   = "{}"
-    border: Border=Border()
+    align:  Align  = Align.TL
+    is_sep: bool   = False
+    fs:     str    = "{}"
+    border: Border = field(default_factory=Border)
+
+    def __add__(self, that):
+        value = that.value if type(that) is self.__class__ else that
+        return self.value + value
+
+    def __sub__(self, that):
+        value = that.value if type(that) is self.__class__ else that
+        return self.value - value
+
+    def __mul__(self, that):
+        value = that.value if type(that) is self.__class__ else that
+        return self.value * value
+
+    def __truediv__(self, that):
+        value = that.value if type(that) is self.__class__ else that
+        return self.value / value
 
 
 @dataclass(slots=True)
@@ -70,10 +86,10 @@ class HeadCell:
     """
     key:    Any
     title:  str
-    width:  int   = 0
-    align:  Align = Align.TL
-    is_sep: bool  = True
-    border: Border=Border()
+    width:  int    = 0
+    align:  Align  = Align.TL
+    is_sep: bool   = True
+    border: Border = field(default_factory=Border)
 
 
 class Array:
@@ -542,9 +558,10 @@ class SimpleTable:
                 cid = self.header.id[cid]
 
             return (rid, cid)
-
         elif type(index) is str:
             return self.index.id[index]
+        else:
+            return index
 
     def __getitem__(self, index):
         """Return an entry or a sub-table."""
