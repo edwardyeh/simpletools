@@ -35,54 +35,28 @@ class Border:
     right:  bool = True
 
 
-@dataclass(slots=True)
-class Cell:
+@dataclass
+class HeadAttr:
     """
-    Attributes
+    Parameters
     ----------
-    value   data value.
-    align   data align for table print.       (default=Align.TL)
-    is_sep  string separate by the separator. (default=False)
-    fs      format string for table print.    (default="{}")
-    border  border setting
-    """
-    value:  Any
-    align:  Align  = Align.TL
-    is_sep: bool   = False
-    fs:     str    = "{}"
-    border: Border = field(default_factory=Border)
-
-    def __add__(self, that):
-        value = that.value if type(that) is self.__class__ else that
-        return self.value + value
-
-    def __sub__(self, that):
-        value = that.value if type(that) is self.__class__ else that
-        return self.value - value
-
-    def __mul__(self, that):
-        value = that.value if type(that) is self.__class__ else that
-        return self.value * value
-
-    def __truediv__(self, that):
-        value = that.value if type(that) is self.__class__ else that
-        return self.value / value
-
-
-@dataclass(slots=True)
-class HeadCell:
-    """
-    Attributes
-    ----------
-    key     column hash key.
-    title   column title.
-    width   column width.                     (default=0)
-    align   title align for table print.      (default=Align.TL)
-    is_sep  string separate by the separator. (default=True)
-    border  border setting.
-
-    If width is 0, use the maximum length of data or title as the column 
-    size when print the table.
+    key : Any
+        Column hash key.
+    title : str
+        Column title.
+    width : int, optional
+        Column width. Default is 0 means use the maximum length of the header 
+        title or table values as the column width when table printing.
+    align : Align, optional
+        Title align for table printing. Default is Align.TL.
+    is_sep : bool, optional
+        String separate by the separator. Default is True.
+    border : Border, optional
+        Border display setting. Default is true for all edges. 
+    lofs : int, optional
+        Number of blanks on the left side of the value string. Default is 1.
+    rofs : int, optional
+        Number of blanks on the right side of the value string. Default is 1.
     """
     key:    Any
     title:  str
@@ -90,276 +64,579 @@ class HeadCell:
     align:  Align  = Align.TL
     is_sep: bool   = True
     border: Border = field(default_factory=Border)
+    lofs:   int    = 1
+    rofs:   int    = 1
 
 
-class Array:
-    """Array wrapper."""
-    def __init__(self, init_array: list=None, is_pure: bool=False):
-        if init_array is None:
-            self._array = []
-        elif not is_pure:
-            self._array = init_array
+class Index:
+    """Header wrapper."""
+    def __init__(self, array: list[HeadAttr]):
+        """
+        Parameters
+        ----------
+        array : list[HeadAttr]
+            Initial array.
+        """
+        self._array = array
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self._array})"
+
+    def _set_attr(self, attr: str, vlist: list[None|str]):
+        if len(self._array) != len(vlist):
+            msg = f"Shapes difference. (self:{ax1}, vlist:{ax2})"
+            raise ValueError(msg)
+        for c, cell in enumerate(self._array):
+            cell.__dict__[attr] = vlist[c]
+
+    @property
+    def shape(self) -> tuple[int]:
+        """shape of the array."""
+        return len(self._array)
+
+    @property
+    def key(self) -> list[None|str]:
+        """hash keys of the header."""
+        return [x.key for x in self._array]
+
+    @key.setter
+    def key(self, vlist: list[None|str]):
+        """hash keys of the header."""
+        self._set_attr('key', vlist)
+
+    @property
+    def title(self) -> list[str]:
+        """titles of the header."""
+        return [x.title for x in self._array]
+
+    @title.setter
+    def title(self, vlist: list[str]):
+        """titles of the header."""
+        self._set_attr('title', vlist)
+
+    @property
+    def width(self) -> list[int]:
+        """column width."""
+        return [x.width for x in self._array]
+
+    @width.setter
+    def width(self, vlist: list[int]):
+        """column width."""
+        self._set_attr('width', vlist)
+
+    @property
+    def align(self) -> list[Align]:
+        """title align for table printing."""
+        return [x.align for x in self._array]
+
+    @align.setter
+    def align(self, vlist: list[Align]):
+        """title align for table printing."""
+        self._set_attr('align', vlist)
+
+    @property
+    def is_sep(self) -> list[bool]:
+        """title separation enable for table printing."""
+        return [x.is_sep for x in self._array]
+
+    @is_sep.setter
+    def is_sep(self, vlist: list[bool]):
+        """title separation enable for table printing."""
+        self._set_attr('is_sep', vlist)
+
+    @property
+    def border(self) -> list[Border]:
+        """border type for table printing."""
+        return [x.border for x in self._array]
+
+    @border.setter
+    def border(self, vlist: list[Border]):
+        """border type for table printing."""
+        self._set_attr('border', vlist)
+
+
+@dataclass
+class TableAttr:
+    """
+    Parameters
+    ----------
+    align : Align, optional
+        Data align for table printing. Default is Align.TL.
+    is_sep : bool, optional
+        String separate by the separator. Default is False.
+    fs : str, optional
+        Format string for table printing. Default is "{}".
+    border: Border, optional
+        Border display setting. Default is true for all edges. 
+    """
+    align:  Align  = Align.TL
+    is_sep: bool   = False
+    fs:     str    = "{}"
+    border: Border = field(default_factory=Border)
+
+
+class AttrArray:
+    """Table attribute wrapper."""
+    def __init__(self, init_array: list[TableAttr]):
+        """
+        Parameters
+        ----------
+        init_array : list[TableAttr]
+            Initial array (only support 1D/2D array).
+        """
+        self._array = init_array
+        if len(init_array) and type(init_array[0]) is list:
+            self._ndim = 2
         else:
-            self._array = [Cell(value) for value in init_array]
+            self._ndim = 1
     
     def __repr__(self):
         return f"{self.__class__.__name__}({self._array})"
 
-    def __add__(self, that):
-        if (ax1:=self.shape) == (ax2:=that.shape):
-            new_array = self.__class__(copy.deepcopy(self._array))
-            if len(ax1) == 1:
-                for c, cell in enumerate(new_array._array):
-                    cell.value += that._array[c].value
-            else:
-                for r, row in enumerate(new_array._array):
-                    for c, cell in enumerate(row):
-                        cell.value += that._array[r][c].value
-            return new_array 
+    def _shape(self, array: list[Any|list[Any]]) -> tuple[int]:
+        """shape of the array."""
+        if (ax1:=len(array)) and type(array[0]) is list:
+            return (ax1, len(array[0]))
         else:
+            return (ax1,)
+
+    def _get_attr(self, attr: str) -> list[Align|list[Align]]:
+        if self._ndim == 2:
+            return [[cell.__dict__[attr] for cell in row] for row in self._array]
+        else:
+            return [cell.__dict__[attr] for cell in self._array]
+
+    def _set_attr(self, attr: str, vlist: list[Align|list[Align]]):
+        if type(vlist) is not list:
+            msg = f"Input need be a list."
+            raise ValueError(msg)
+        if (ax1:=self.shape) != (ax2:=self._shape(vlist)):
             msg = f"Shapes difference. (self:{ax1}, that:{ax2})"
             raise ValueError(msg)
-
-    def __sub__(self, that):
-        if (ax1:=self.shape) == (ax2:=that.shape):
-            new_array = self.__class__(copy.deepcopy(self._array))
-            if len(ax1) == 1:
-                for c, cell in enumerate(new_array._array):
-                    cell.value -= that._array[c].value
-            else:
-                for r, row in enumerate(new_array._array):
-                    for c, cell in enumerate(row):
-                        cell.value -= that._array[r][c].value
-            return new_array 
+        if self._ndim == 2:
+            for r in range(ax1[0]):
+                for c in range(ax1[1]):
+                    self._array[r][c].__dict__[attr] = vlist[r][c]
         else:
-            msg = f"Shapes difference. (self:{ax1}, that:{ax2})"
-            raise ValueError(msg)
-
-    def __mul__(self, that):
-        if (ax1:=self.shape) == (ax2:=that.shape):
-            new_array = self.__class__(copy.deepcopy(self._array))
-            if len(ax1) == 1:
-                for c, cell in enumerate(new_array._array):
-                    cell.value *= that._array[c].value
-            else:
-                for r, row in enumerate(new_array._array):
-                    for c, cell in enumerate(row):
-                        cell.value *= that._array[r][c].value
-            return new_array 
-        else:
-            msg = f"Shapes difference. (self:{ax1}, that:{ax2})"
-            raise ValueError(msg)
-
-    def __truediv__(self, that):
-        if (ax1:=self.shape) == (ax2:=that.shape):
-            new_array = self.__class__(copy.deepcopy(self._array))
-            if len(ax1) == 1:
-                for c, cell in enumerate(new_array._array):
-                    cell.value /= that._array[c].value
-            else:
-                for r, row in enumerate(new_array._array):
-                    for c, cell in enumerate(row):
-                        cell.value /= that._array[r][c].value
-            return new_array 
-        else:
-            msg = f"Shapes difference. (self:{ax1}, that:{ax2})"
-            raise ValueError(msg)
-
-    def _get_array(self, index):
-        """ Return an entry or a sub-table."""
-        if type(index) is tuple:
-            rid, cid = index
-            if type(rid) is int:
-                return self._array[rid][cid]
-            else:
-                return [rarray[cid] for rarray in self._array[rid]]
-        else:
-            return self._array[index]
-
-    def __getitem__(self, index):
-        """ Return an entry or a sub-table."""
-        array = self._get_array(index)
-        return self.__class__(array) if type(array) is list else array
-
-    def __setitem__(self, index, that):
-        """Set entry values."""
-        array = self._get_array(index)
-        if (ax1:=self._shape(array)) == (ax2:=that.shape):
-            if len(ax1) == 1:
-                for c, cell in enumerate(array):
-                    cell.value = that._array[c].value
-            else:
-                for r, row in enumerate(array):
-                    for c, cell in enumerate(row):
-                        cell.value = that._array[r][c].value
-        else:
-            msg = f"Shapes difference. (self:{ax1}, that:{ax2})"
-            raise ValueError(msg)
-
-    def _shape(self, array: list) -> list:
-        """Return the shape of the array. (format=([row,] col))"""
-        if type(array[0]) is list:
-            return (len(array), len(array[0]))
-        else:
-            return (len(array), )
+            for r in range(ax1[0]):
+                self._array[r].__dict__[attr] = vlist[r]
 
     @property
-    def shape(self) -> list:
-        """Return the shape of the array. (format=(row, col))"""
+    def shape(self) -> tuple[int]:
+        """shape of the array."""
         return self._shape(self._array)
 
     @property
-    def value(self) -> list:
-        """Return the value list."""
-        vlist = []
-        for a1 in self._array:
-            vlist.append([a2.value for a2 in a1] if type(a1) is list 
-                         else a1.value)
-        return vlist
-
-    @value.setter
-    def value(self, vlist: list):
-        """Set cell values."""
-        if (ax1:=self.shape) == (ax2:=self._shape(vlist)):
-            if len(ax1) == 1:
-                for c, cell in enumerate(self._array):
-                    cell.value = vlist[c]
-            else:
-                for r, row in enumerate(self._array):
-                    for c, cell in enumerate(row):
-                        cell.value = vlist[r][c]
-        else:
-            msg = f"Shapes difference. (self:{ax1}, vlist:{ax2})"
-            raise ValueError(msg)
+    def ndim(self) -> int:
+        """dimensions of the array."""
+        return self._ndim
 
     @property
-    def align(self) -> list:
-        """Return the align list."""
-        vlist = []
-        for a1 in self._array:
-            vlist.append([a2.align for a2 in a1] if type(a1) is list 
-                         else a1.align)
-        return vlist
+    def align(self) -> list[Align|list[Align]]:
+        """align for table printing."""
+        return self._get_attr('align')
 
     @align.setter
-    def align(self, vlist: list):
-        """Set cell aligns."""
-        if (ax1:=self.shape) == (ax2:=self._shape(vlist)):
-            if len(ax1) == 1:
-                for c, cell in enumerate(self._array):
-                    cell.align = vlist[c]
-            else:
-                for r, row in enumerate(self._array):
-                    for c, cell in enumerate(row):
-                        cell.align = vlist[r][c]
-        else:
-            msg = f"Shapes difference. (self:{ax1}, vlist:{ax2})"
-            raise ValueError(msg)
+    def align(self, vlist: list[Align|list[Align]]):
+        """align for table printing."""
+        self._set_attr('align', vlist)
 
     @property
-    def is_sep(self) -> list:
-        """Return the is_sep list."""
-        vlist = []
-        for a1 in self._array:
-            vlist.append([a2.is_sep for a2 in a1] if type(a1) is list 
-                         else a1.is_sep)
-        return vlist
+    def is_sep(self) -> list[Align|list[Align]]:
+        """separation enable for table printing."""
+        return self._get_attr('is_sep')
 
     @is_sep.setter
-    def is_sep(self, vlist: list):
-        """Set cell is_seps."""
-        if (ax1:=self.shape) == (ax2:=self._shape(vlist)):
-            if len(ax1) == 1:
-                for c, cell in enumerate(self._array):
-                    cell.is_sep = vlist[c]
-            else:
-                for r, row in enumerate(self._array):
-                    for c, cell in enumerate(row):
-                        cell.is_sep = vlist[r][c]
-        else:
-            msg = f"Shapes difference. (self:{ax1}, vlist:{ax2})"
-            raise ValueError(msg)
+    def is_sep(self, vlist: list[Align|list[Align]]):
+        """separation enable for table printing."""
+        self._set_attr('is_sep', vlist)
 
     @property
-    def fs(self) -> list:
-        """Return the fs list."""
-        vlist = []
-        for a1 in self._array:
-            vlist.append([a2.fs for a2 in a1] if type(a1) is list 
-                         else a1.fs)
-        return vlist
+    def fs(self) -> list[Align|list[Align]]:
+        """f-string for table printing."""
+        return self._get_attr('fs')
 
     @fs.setter
-    def fs(self, vlist: list):
-        """Set cell fs."""
-        if (ax1:=self.shape) == (ax2:=self._shape(vlist)):
-            if len(ax1) == 1:
-                for c, cell in enumerate(self._array):
-                    cell.fs = vlist[c]
-            else:
-                for r, row in enumerate(self._array):
-                    for c, cell in enumerate(row):
-                        cell.fs = vlist[r][c]
-        else:
-            msg = f"Shapes difference. (self:{ax1}, vlist:{ax2})"
-            raise ValueError(msg)
+    def fs(self, vlist: list[Align|list[Align]]):
+        """f-string for table printing."""
+        self._set_attr('fs', vlist)
 
     @property
-    def border(self) -> list:
-        """Return the border list."""
-        vlist = []
-        for a1 in self._array:
-            vlist.append([a2.border for a2 in a1] if type(a1) is list 
-                         else a1.border)
-        return vlist
+    def border(self) -> list[Align|list[Align]]:
+        """border type for table printing."""
+        return self._get_attr('border')
 
     @border.setter
-    def border(self, vlist: list):
-        """Set cell border."""
-        if (ax1:=self.shape) == (ax2:=self._shape(vlist)):
-            if len(ax1) == 1:
-                for c, cell in enumerate(self._array):
-                    cell.border = copy.copy(vlist[c])
-            else:
-                for r, row in enumerate(self._array):
-                    for c, cell in enumerate(row):
-                        cell.border = copy.copy(vlist[r][c])
+    def border(self, vlist: list[Align|list[Align]]):
+        """border type for table printing."""
+        self._set_attr('border', vlist)
+
+
+class Array:
+    """Table wrapper."""
+    def __init__(self, init_array: list[Any]):
+        """
+        Parameters
+        ----------
+        init_array : list[Any]
+            Initial array (only support 1D/2D array).
+        """
+        self._array = init_array
+        if len(init_array) and type(init_array[0]) is list:
+            self._ndim = 2
         else:
-            msg = f"Shapes difference. (self:{ax1}, vlist:{ax2})"
-            raise ValueError(msg)
-
-
-class Index:
-    """Index wrapper."""
-    def __init__(self, init_array: list=None):
-        self._array = [] if init_array is None else init_array
-
+            self._ndim = 1
+    
     def __repr__(self):
         return f"{self.__class__.__name__}({self._array})"
 
-    def __getitem__(self, index):
-        """ Return an entry or a sub-table."""
-        if type(index) is slice:
-            st, ed = index.start, index.stop
-            if type(st) is str or type(ed) is str:
-                index = slice(self.id[st], self.id[ed]+1)
-        elif type(index) is str:
-            index = self.id[index]
-        array = self._array[index]
-        return self.__class__(array) if type(array) is list else array
+    def __add__(self, that: 'Array') -> 'Array':
+        if (ax1:=self.shape) != (ax2:=that.shape):
+            msg = f"Shapes difference. (self:{ax1}, that:{ax2})"
+            raise ValueError(msg)
+        if self._ndim == 2:
+            new = [[self._array[r][c] + that._array[r][c] 
+                    for c in range(ax1[1])] 
+                    for r in range(ax1[0])]
+        else:
+            new = [self._array[i] + that._array[i] 
+                   for i in range(ax1[0])]
+        return self.__class__(new)
+
+    def __sub__(self, that: 'Array') -> 'Array':
+        if (ax1:=self.shape) != (ax2:=that.shape):
+            msg = f"Shapes difference. (self:{ax1}, that:{ax2})"
+            raise ValueError(msg)
+        if self._ndim == 2:
+            new = [[self._array[r][c] - that._array[r][c] 
+                    for c in range(ax1[1])] 
+                    for r in range(ax1[0])]
+        else:
+            new = [self._array[i] - that._array[i] 
+                   for i in range(ax1[0])]
+        return self.__class__(new)
+
+    def __mul__(self, that: 'Array') -> 'Array':
+        if (ax1:=self.shape) != (ax2:=that.shape):
+            msg = f"Shapes difference. (self:{ax1}, that:{ax2})"
+            raise ValueError(msg)
+        if self._ndim == 2:
+            new = [[self._array[r][c] * that._array[r][c] 
+                    for c in range(ax1[1])] 
+                    for r in range(ax1[0])]
+        else:
+            new = [self._array[i] * that._array[i] 
+                   for i in range(ax1[0])]
+        return self.__class__(new)
+
+    def __truediv__(self, that: 'Array') -> 'Array':
+        if (ax1:=self.shape) != (ax2:=that.shape):
+            msg = f"Shapes difference. (self:{ax1}, that:{ax2})"
+            raise ValueError(msg)
+        if self._ndim == 2:
+            new = [[self._array[r][c] / that._array[r][c] 
+                    for c in range(ax1[1])] 
+                    for r in range(ax1[0])]
+        else:
+            new = [self._array[i] / that._array[i] 
+                   for i in range(ax1[0])]
+        return self.__class__(new)
+
+    def __getitem__(self, index) -> 'Array':
+        if type(index) is tuple:
+            rs, cs = index
+            if type(rs) is slice:
+                new = [row[cs] for row in self._array[rs]]
+            else:
+                new = self._array[rs][cs]
+        else:
+            new = copy.deepcopy(self._array[index])
+        return self.__class__(new) if type(new) is list else new
+
+    def __setitem__(self, index, that):
+        if type(that) is self.__class__:
+            that = that._array
+        if self._ndim == 2:
+            mr, mc = self.shape
+            if type(index) is tuple:
+                rs, cs = index
+                if type(rs) is slice:
+                    for i, r in enumerate(range(*rs.indices(mr))):
+                        if type(cs) is slice:
+                            for j, c in enumerate(range(*cs.indices(mc))):
+                                self._array[r][c] = that[i][j]
+                        else:
+                            self._array[r][cs] = that[i]
+                elif type(cs) is slice:
+                    for i, c in enumerate(range(*cs.indices(mc))):
+                        self._array[rs][c] = that[i]
+                else:
+                    self._array[rs][cs] = that
+            elif type(index) is slice:
+                for i, r in enumerate(range(*index.indices(mr))):
+                    for c in range(self.shape[1]):
+                        self._array[r][c] = that[i][c]
+            else:
+                for c in range(self.shape[1]):
+                    self._array[index][c] = that[c]
+        elif type(index) is slice:
+            for i, r in enumerate(range(*index.indices(self.shape[0]))):
+                self._array[r] = that[i]
+        else:
+            self._array[index] = that
 
     @property
-    def length(self) -> int:
-        """Return the length of the index."""
-        return len(self._array)
+    def shape(self) -> tuple[int]:
+        """shape of the array."""
+        if (ax1:=len(self._array)) and type(self._array[0]) is list:
+            return (ax1, len(self._array[0]))
+        else:
+            return (ax1,)
 
     @property
-    def id(self) -> dict:
-        """Return key/ID pair by the dictionary."""
+    def ndim(self) -> int:
+        """dimensions of the array."""
+        return self._ndim
+
+    def tolist(self) -> list[Any]:
+        """array to list."""
+        return copy.deepcopy(self._array)
+
+
+class SimpleTable:
+    """A Simple Text Table Generator."""
+    def __init__(self, 
+                 heads: list[tuple[str]], 
+                 sep: str = '.', 
+                 rdiv_cnt: int = 0, 
+                 is_partp: bool = True, 
+                 border: None|Border = None,
+                 lsh:  int = 0,
+                 hpat: str = '-', 
+                 hcpat: str = '+', 
+                 vpat: str = '-', 
+                 vcpat: str = '+', 
+                 spat: str = '|',
+                 cpat_alon: bool = False):
+        """
+        Arguments
+        ---------
+        heads : list[tuple[str]]
+            The header list of the table, format is bellow:
+            [(key1, title1), (key2, title2), ...]
+            Key & Title must be string type.
+        sep : str, optional
+            Separator used to split the string. Default is '.'.
+        rdiv_cnt : int, optional
+            Number of rows between two data row dividers. Default is 0 means 
+            inifite.
+        is_partp : bool, optional
+            Partial value print if the length of the table value is greater 
+            than the column width. Default is True.
+            If any cell's attribute 'is_sep' is True, force to True.
+        border : {None, Border}, optional
+            Set the border around the table is hide or reveal. Default is all 
+            borders reveal.
+        lsh : int, optional
+            left shift offset for table printing. Default is 0.
+        hpat : str, optional
+            Header divider pattern for table printing. Default is '-'.
+        hcpat : str, optional
+            Cross corner pattern of the header for table printing. 
+            Default is '+'.
+        vpat : str, optional
+            Content divider for table printing. Default is '-'.
+        vcpat : str, optional
+            Cross corner pattern of the content for table printing. 
+            Default is '+'.
+        spat : str, optional
+            Column separate pattern for table printing. Default is '|'.
+        cpat_alon : bool, optional
+            Always show the cross corner pattern for table printing.
+            Default is False.
+        """
+        self._sep = sep
+        self._rdiv_cnt = math.inf if rdiv_cnt == 0 else rdiv_cnt
+        self.is_partp = is_partp
+        self.border = Border() if border is None else border
+        self.lsh = lsh
+        self.hpat = hpat
+        self.hcpat = hcpat
+        self.vpat = vpat 
+        self.vcpat = vcpat
+        self.spat = spat 
+        self.cpat_alon = cpat_alon
+
+        self._max_row = 0
+        self._index_head = HeadAttr(None, '')
+        self._index = []
+        self._header = []
+        self._table = []
+        self._attr = []
+        for i, (key, title) in enumerate(heads):
+            self._header.append(HeadAttr(key, title))
+
+    class _IndexLocation:
+        def __init__(self, head: list[HeadAttr]):
+            self._head = head
+
+        def __repr__(self):
+            return f"{self.__class__.__name__}({self._head})"
+
+        def __getitem__(self, index: int|str|slice) -> Index:
+            index = (self._get_index(index, 2) if type(index) is slice
+                        else self._get_index(index, 1))
+            new = self._head[index]
+            return Index(new) if type(new) is list else new 
+
+        def _get_index(self, index: int|str|slice, itype: int) -> int|slice:
+            if itype == 1:
+                return index if type(index) is int else self.id[index]
+            elif itype == 2:
+                st = (0 if index.start is None
+                        else index.start if type(index.start) is int
+                        else self.id[index.start])
+                ed = (len(self._head) if index.stop is None
+                        else index.stop if type(index.stop) is int
+                        else self.id[index.stop]+1)
+                return slice(st, ed)
+
+        @property
+        def id(self) -> dict[str, int]:
+            """key/id pair of the header."""
+            vdict = {}
+            for i, cell in enumerate(self._head):
+                if type(key:=cell.key) is not str:
+                    msg = f"Hash key must be the string type (id[{i}]={key})."
+                    raise KeyError(msg)
+                elif key in vdict:
+                    msg = f"Hash key repeat (id[{vdict[key]}]==id[{i}])."
+                    raise KeyError(msg)
+                else:
+                    vdict[key] = i
+            return vdict 
+
+    class _AttrLocation:
+        def __init__(self, head: list[HeadAttr], index: list[HeadAttr], 
+                     attr: list[TableAttr]):
+            self._head = head
+            self._index = index 
+            self._attr = attr 
+
+        def __repr__(self):
+            return f"{self.__class__.__name__}({self._attr})"
+
+        def __getitem__(self, index: int|str|slice|tuple) -> AttrArray:
+            cidx = lambda x,y: self._get_index(self._head, x, y)
+            ridx = lambda x,y: self._get_index(self._index, x, y)
+            if type(index) is tuple:
+                rs, cs = index
+                if type(rs) is slice:
+                    rs = ridx(rs, 2)
+                    cs = cidx(cs, 2) if type(cs) is slice else cidx(cs, 1)
+                    new = [row[cs] for row in self._attr[rs]]
+                elif type(cs) is slice:
+                    new = self._attr[ridx(rs, 1)][cidx(cs, 2)]
+                else:
+                    new = self._attr[ridx(rs, 1)][cidx(cs, 1)]
+            elif type(index) is slice:
+                new = copy.deepcopy(self._attr[ridx(index, 2)])
+            else:
+                new = copy.deepcopy(self._attr[ridx(index, 1)])
+            return AttrArray(new) if type(new) is list else new
+
+        def _get_index(self, idata: list, index: int|str|slice, itype: int) \
+                       -> int|slice:
+            if itype == 1:
+                return (index if type(index) is int
+                            else self._get_id(idata)[index])
+            elif itype == 2:
+                st = (0 if index.start is None
+                        else index.start if type(index.start) is int
+                        else self._get_id(idata)[index.start])
+                ed = (len(idata) if index.stop is None
+                        else index.stop if type(index.stop) is int
+                        else self._get_id(idata)[index.stop]+1)
+                return slice(st, ed)
+
+        def _get_id(self, idata: list) -> dict[str, int]:
+            """key/id pair of the header or index."""
+            vdict = {}
+            for i, cell in enumerate(idata):
+                if type(key:=cell.key) is not str:
+                    msg = f"Hash key must be the string type (id[{i}]={key})."
+                    raise KeyError(msg)
+                elif key in vdict:
+                    msg = f"Hash key repeat (id[{vdict[key]}]==id[{i}])."
+                    raise KeyError(msg)
+                else:
+                    vdict[key] = i
+            return vdict 
+
+    @property
+    def sep(self) -> str:
+        """string separator."""
+        return self._sep
+
+    @property
+    def rdiv_cnt(self) -> int:
+        """row count between two data dividers."""
+        return 0 if self._rdiv_cnt == math.inf else self._rdiv_cnt
+
+    @rdiv_cnt.setter
+    def rdiv_cnt(self, rdiv_cnt: int):
+        """row count between two data dividers."""
+        self._rdiv_cnt = math.inf if rdiv_cnt == 0 else rdiv_cnt
+
+    @property
+    def max_row(self) -> int:
+        """row number of table."""
+        return self._max_row
+
+    @property
+    def max_col(self) -> int:
+        """column number of table."""
+        return len(self._header)
+
+    @property
+    def header(self) -> _IndexLocation:
+        """column header information."""
+        return self._IndexLocation(self._header)
+
+    @property
+    def index(self) -> _IndexLocation:
+        """row index information."""
+        return self._IndexLocation(self._index)
+
+    @property
+    def attr(self) -> _AttrLocation:
+        """table attribute information"""
+        return self._AttrLocation(self._header, self._index, self._attr)
+
+    @property
+    def index_head(self) -> HeadAttr:
+        """column header of the row index."""
+        return self._index_head
+
+    def _get_index(self, idata: list, index: int|str|slice, itype: int) \
+                   -> int|slice:
+        if itype == 1:
+            return (index if type(index) is int
+                        else self._get_id(idata)[index])
+        elif itype == 2:
+            st = (0 if index.start is None
+                    else index.start if type(index.start) is int
+                    else self._get_id(idata)[index.start])
+            ed = (len(idata) if index.stop is None
+                    else index.stop if type(index.stop) is int
+                    else self._get_id(idata)[index.stop]+1)
+            return slice(st, ed)
+
+    def _get_id(self, idata: list) -> dict[str, int]:
+        """key/id pair of the header or index."""
         vdict = {}
-        for i, cell in enumerate(self._array):
-            key = cell.key
-            if type(key) is not str:
+        for i, cell in enumerate(idata):
+            if type(key:=cell.key) is not str:
                 msg = f"Hash key must be the string type (id[{i}]={key})."
                 raise KeyError(msg)
             elif key in vdict:
@@ -369,271 +646,182 @@ class Index:
                 vdict[key] = i
         return vdict 
 
-    @property
-    def key(self) -> list:
-        """Get hash keys of the index."""
-        return [x.key for x in self._array]
-
-    @key.setter
-    def key(self, vlist: list):
-        """Set index keys"""
-        if (sz1:=len(self._array)) == (sz2:=len(vlist)):
-            for c, cell in enumerate(self._array):
-                cell.key = vlist[c]
-        else:
-            msg = f"Shapes difference. (self:{ax1}, vlist:{ax2})"
-            raise ValueError(msg)
-
-    @property
-    def title(self) -> list:
-        """Get titles of the index."""
-        return [x.title for x in self._array]
-
-    @title.setter
-    def title(self, vlist: list):
-        """Set index titles"""
-        if (sz1:=len(self._array)) == (sz2:=len(vlist)):
-            for c, cell in enumerate(self._array):
-                cell.title = vlist[c]
-        else:
-            msg = f"Shapes difference. (self:{ax1}, vlist:{ax2})"
-            raise ValueError(msg)
-
-    @property
-    def width(self) -> list:
-        """Get titles of the index."""
-        return [x.width for x in self._array]
-
-    @width.setter
-    def width(self, vlist: list):
-        """Set index titles"""
-        if (sz1:=len(self._array)) == (sz2:=len(vlist)):
-            for c, cell in enumerate(self._array):
-                cell.width = vlist[c]
-        else:
-            msg = f"Shapes difference. (self:{ax1}, vlist:{ax2})"
-            raise ValueError(msg)
-
-    @property
-    def align(self) -> list:
-        """Get titles of the index."""
-        return [x.align for x in self._array]
-
-    @align.setter
-    def align(self, vlist: list):
-        """Set index titles"""
-        if (sz1:=len(self._array)) == (sz2:=len(vlist)):
-            for c, cell in enumerate(self._array):
-                cell.align = vlist[c]
-        else:
-            msg = f"Shapes difference. (self:{ax1}, vlist:{ax2})"
-            raise ValueError(msg)
-
-    @property
-    def is_sep(self) -> list:
-        """Get titles of the index."""
-        return [x.is_sep for x in self._array]
-
-    @is_sep.setter
-    def is_sep(self, vlist: list):
-        """Set index titles"""
-        if (sz1:=len(self._array)) == (sz2:=len(vlist)):
-            for c, cell in enumerate(self._array):
-                cell.is_sep = vlist[c]
-        else:
-            msg = f"Shapes difference. (self:{ax1}, vlist:{ax2})"
-            raise ValueError(msg)
-
-    @property
-    def border(self) -> list:
-        """Get titles of the index."""
-        return [x.border for x in self._array]
-
-    @border.setter
-    def border(self, vlist: list):
-        """Set index titles"""
-        if (sz1:=len(self._array)) == (sz2:=len(vlist)):
-            for c, cell in enumerate(self._array):
-                cell.border = copy.copy(vlist[c])
-        else:
-            msg = f"Shapes difference. (self:{ax1}, vlist:{ax2})"
-            raise ValueError(msg)
-
-
-class SimpleTable:
-    """A Simple Text Table Generator."""
-    def __init__(self, heads: list, sep: str='.', rdiv_cnt: Any=math.inf, 
-                 is_partp: bool=True, epat: str='+', hpat: str='-', 
-                 vpat: str='-', spat: str='|'):
-        """
-        Arguments
-        ---------
-        heads     format=[(key1, title1), (key2, title2), ...].
-                    # The key & title must be the string type.
-
-        sep       the separator use to split the string.
-
-        rdiv_cnt  the number of rows between two data row dividers.
-                    # Use default if set 0.
-
-        is_partp  show partial content if the data length is greater than the 
-                  column width.
-                    # If any data row is separated, force is_partp=True.
-
-        epat      edge pattern for table print.
-        hpat      header divider pattern for table print.
-        vpat      content divider for table print.
-        spat      separate pattern for table print.
-        """
-        self._index_head = HeadCell(None, '')
-        self._index = []
-        self._header = []
-        self._table = []
-        self._sep = sep
-        self._rdiv_cnt = math.inf if rdiv_cnt == 0 else rdiv_cnt
-        self.is_partp = is_partp
-        self.epat = '+' 
-        self.hpat = '-' 
-        self.vpat = '-' 
-        self.spat = '|' 
-
-        for i, (key, title) in enumerate(heads):
-            self._header.append(HeadCell(key, title))
-
-    @property
-    def sep(self) -> str:
-        """Return the string separator."""
-        return self._sep
-
-    @property
-    def rdiv_cnt(self) -> int:
-        """Return the row count between two data dividers."""
-        return self._rdiv_cnt
-
-    @rdiv_cnt.setter
-    def rdiv_cnt(self, rdiv_cnt: int):
-        """Set the row count between two data dividers."""
-        self._rdiv_cnt = math.inf if rdiv_cnt == 0 else rdiv_cnt
-
-    @property
-    def header(self) -> list:
-        """Return the head list."""
-        return Index(self._header.copy())
-
-    @property
-    def index(self) -> list:
-        """Return the index list."""
-        return Index(self._index.copy())
-
-    @property
-    def index_head(self) -> HeadCell:
-        """Return the index head cell."""
-        return self._index_head
-
-    @property
-    def max_row(self) -> int:
-        """Return the row number of the table."""
-        return len(self._table)
-
-    @property
-    def max_col(self) -> int:
-        """Return the column number of the table."""
-        return len(self._header)
-
-    def _analyze_index(self, index):
-        """Analyze index for the magic method."""
+    def __getitem__(self, index: int|str|slice|tuple) -> Array:
+        cidx = lambda x,y: self._get_index(self._header, x, y)
+        ridx = lambda x,y: self._get_index(self._index, x, y)
         if type(index) is tuple:
-            if type(rid:=index[0]) is slice:
-                st, ed = rid.start, rid.stop
-                if type(st) is str or type(ed) is str:
-                    rid = slice(self.index.id[st], self.index.id[ed]+1)
-            elif type(rid) is str:
-                rid = self.index.id[rid]
-
-            if type(cid:=index[1]) is slice:
-                st, ed = cid.start, cid.stop
-                if type(st) is str or type(ed) is str:
-                    cid = slice(self.header.id[st], self.header.id[ed]+1)
-            elif type(cid) is str:
-                cid = self.header.id[cid]
-
-            return (rid, cid)
-        elif type(index) is str:
-            return self.index.id[index]
+            rs, cs = index
+            if type(rs) is slice:
+                rs = ridx(rs, 2)
+                cs = cidx(cs, 2) if type(cs) is slice else cidx(cs, 1)
+                new = [row[cs] for row in self._table[rs]]
+            elif type(cs) is slice:
+                new = self._table[ridx(rs, 1)][cidx(cs, 2)]
+            else:
+                new = self._table[ridx(rs, 1)][cidx(cs, 1)]
+        elif type(index) is slice:
+            new = copy.deepcopy(self._table[ridx(index, 2)])
         else:
-            return index
+            new = copy.deepcopy(self._table[ridx(index, 1)])
+        return Array(new) if type(new) is list else new
 
-    def __getitem__(self, index):
-        """Return an entry or a sub-table."""
-        return Array(self._table).__getitem__(self._analyze_index(index))
+    def __setitem__(self, index: int|str|slice|tuple, that: Any):
+        cidx = lambda x,y: self._get_index(self._header, x, y)
+        ridx = lambda x,y: self._get_index(self._index, x, y)
+        mr, mc = self.max_row, self.max_col
+        if type(that) is Array:
+            that = that._array
+        if type(index) is tuple:
+            rs, cs = index
+            if type(rs) is slice:
+                rrs = range(*ridx(rs, 2).indices(mr))
+                for i, r in enumerate(rrs):
+                    if type(cs) is slice:
+                        rcs = range(*cidx(cs, 2).indices(mc))
+                        for j, c in enumerate(rcs):
+                            self._table[r][c] = that[i][j]
+                    else:
+                        self._table[r][cidx(cs, 1)] = that[i]
+            elif type(cs) is slice:
+                r, rcs = ridx(rs, 1), range(*cidx(cs, 2).indices(mc))
+                for i, c in enumerate(rcs):
+                    self._table[r][c] = that[i]
+            else:
+                self._table[ridx(rs, 1)][cidx(cs, 1)] = that
+        elif type(index) is slice:
+            rrs = range(*ridx(index, 2).indices(mr))
+            for i, r in enumerate(rrs):
+                for c in range(mc):
+                    self._table[r][c] = that[i][c]
+        else:
+            r = ridx(index, 1)
+            for c in range(mc):
+                self._table[r][c] = that[c]
 
-    def __setitem__(self, index, that):
-        """Set entry values."""
-        Array(self._table).__setitem__(self._analyze_index(index), that)
-
-    def add_row(self, key, title: str, data: list, align: int=Align.NONE, 
-                init: Any='', loc: Any=None):
+    def add_row(self, key: None|str, title: str, data: list[Any], 
+                init: Any = '', loc: None|str|int = None,
+                align: Align = Align.NONE,
+                is_sep: None|bool = None,
+                fs: None|str = None,
+                border: None|Border = None):
         """
-        Add a new row.
+        Add a new row to the table.
 
-        Arguments
-        ---------
-        key    row hash key (must be the string type or None).
-        title  row title.
-        data   value list.
-        align  data align for table print.
-        init   initial value (set initial value if len(row) > len(data)).
-        loc    insert before specific row hash key or ID.
+        Parameters
+        ----------
+        key : {None, str}
+            Row hash key.
+        title : str
+            Row title.
+        data : list[Any] 
+            Value list.
+        init : Any, optional
+            Initial value used if number of columns of a row is smaller than 
+            the length of the value list. Default is ''.
+        loc : {None, str, int}
+            Insert new row before the row specificed by row hash key or ID.
+            Default is None means append new row to table.
+        align : Align, optional
+            Data align for table printing. Default is Align.NONE.
+        is_sep : {None, bool}, optional
+            String separate by the separator. Default is None.
+        fs : {None, str}, optional
+            Format string for table printing. Default is None.
+        border: {None, Border}, optional
+            Border display setting. Default is None. 
+
+        Notes
+        -----
+        If the value of an attribute is None, copy the setting from 
+        the above row.
         """
         if loc is None:
             rid = self.max_row
         else:
             rid = self.index.id[loc] if type(loc) is str else loc
         data_size = len(data)
-        self._index.insert(rid, HeadCell(key, title))
+        self._index.insert(rid, HeadAttr(key, title))
         self._table.insert(rid, row:=[])
+        self._attr.insert(rid, attr:=[])
+        self._max_row += 1
         for i in range(self.max_col):
             if self.max_row == 1:
-                align_ = Align.TL
-            elif align == Align.NONE:
-                align_ = self._table[rid-1][i].align
+                align_ = align if align != Align.NONE else Align.TL
+                is_sep_ = is_sep if is_sep is not None else False
+                fs_ = fs if fs is not None else "{}"
+                border_ = border if border is not None else Border()
             else:
-                align_ = align
-            value = data[i] if i < data_size else init
-            row.append(Cell(value, align=align_))
+                align_ = align if align != Align.NONE \
+                            else self._attr[rid-1][i].align
+                is_sep_ = is_sep if is_sep is not None \
+                            else self._attr[rid-1][i].is_sep
+                fs_ = fs if fs is not None \
+                            else self._attr[rid-1][i].fs
+                border_ = border if border is not None \
+                            else copy.copy(self._attr[rid-1][i].border)
 
-    def add_col(self, key, title: str, data: list, align: int=Align.TL, 
-                init: Any='', loc: Any=None):
+            row.append(data[i] if i < data_size else init)
+            attr.append(TableAttr(align=align_, 
+                                  is_sep=is_sep_,
+                                  fs=fs_,
+                                  border=border_))
+
+    def add_col(self, key: None|str, title: str, data: list[Any], 
+                init: Any = '', loc: None|str|int = None,
+                align: Align = Align.TL,
+                is_sep: bool = False,
+                fs: str = "{}",
+                border : None|Border = None):
         """
-        Add a new column.
+        Add a new column to the table.
 
-        Arguments
-        ---------
-        key    column hash key (must be the string type or None).
-        title  column title.
-        data   value list.
-        align  data align for table print.
-        init   initial value (set initial value if len(row) > len(data)).
-        loc    insert before specific column hash key or ID.
+        Parameters
+        ----------
+        key : {None, str}
+            Column hash key.
+        title : str
+            Column title.
+        data : list[Any]
+            Value list.
+        init : Any, optional
+            Initial value used if number of rows of a column is smaller than 
+            the length of the value list. Default is ''.
+        loc : {None, str, int}
+            Insert new column before the column specificed by column hash key 
+            or ID. Default is None means append new column to table.
+        align : Align, optional
+            Data align for table printing. Default is Align.NONE.
+        is_sep : bool, optional
+            String separate by the separator. Default is False.
+        fs : str, optional
+            Format string for table printing. Default is "{}".
+        border: Border, optional
+            Border display setting. Default is true for all edges. 
         """
         if loc is None:
             cid = self.max_col
         else:
             cid = self.header.id[loc] if type(loc) is str else loc
         data_size = len(data)
-        self._header.insert(cid, HeadCell(key, title))
+        self._header.insert(cid, HeadAttr(key, title))
         for i in range(self.max_row):
             value = data[i] if i < data_size else init
-            self._table[i].insert(cid, Cell(value, align=align))
+            self._table[i].insert(cid, value)
+            self._attr[i].insert(cid, TableAttr(align=align,
+                                                is_sep=is_sep,
+                                                fs=fs,
+                                                border=border))
 
-    def swap_row(self, index1, index2):
+    def swap_row(self, index1: str|int, index2: str|int):
         """
         Swap two specific rows.
 
-        Arguments
-        ---------
-        index1  row1 hash key or ID.
-        index2  row2 hash key or ID.
+        Parameters
+        ----------
+        index1 : {str, int}
+            Row1 hash key or ID.
+        index2 : {str, int}
+            Row2 hash key or ID.
         """
         rid1 = self.index.id[index1] if type(index1) is str else index1
         rid2 = self.index.id[index2] if type(index2) is str else index2
@@ -641,15 +829,19 @@ class SimpleTable:
             self._index[rid2], self._index[rid1])
         self._table[rid1], self._table[rid2] = (
             self._table[rid2], self._table[rid1])
+        self._attr[rid1], self._attr[rid2] = (
+            self._attr[rid2], self._attr[rid1])
 
-    def swap_col(self, index1, index2):
+    def swap_col(self, index1: str|int, index2: str|int):
         """
         Swap two specific columns.
 
-        Arguments
-        ---------
-        index1  column1 hash key or ID.
-        index2  column2 hash key or ID.
+        Parameters
+        ----------
+        index1 : {str, int}
+            Column1 hash key or ID.
+        index2 : {str, int}
+            Column2 hash key or ID.
         """
         cid1 = self.header.id[index1] if type(index1) is str else index1
         cid2 = self.header.id[index2] if type(index2) is str else index2
@@ -658,46 +850,66 @@ class SimpleTable:
         for i in range(self.max_row):
             self._table[i][cid1], self._table[i][cid2] = (
                 self._table[i][cid2], self._table[i][cid1])
+            self._attr[i][cid1], self._attr[i][cid2] = (
+                self._attr[i][cid2], self._attr[i][cid1])
 
-    def del_row(self, index):
+    def del_row(self, index: str|int):
         """
         Delete the specific row.
 
-        Arguments
-        ---------
-        index  row hash key or ID.
+        Parameters
+        ----------
+        index : {str, int}
+            Row hash key or ID.
         """
         if self.max_row > 0:
             rid = self.index.id[index] if type(index) is str else index
             del self._index[rid]
             del self._table[rid]
+            del self._attr[rid]
+            self._max_row -= 1
 
-    def del_col(self, index):
+    def del_col(self, index: str|int):
         """
         Delete the specific column.
 
-        Arguments
-        ---------
-        index  column hash key or ID.
+        Parameters
+        ----------
+        index : {str, int}
+            Column hash key or ID.
         """
         cid = self.header.id[index] if type(index) is str else index
         del self._header[cid]
         for i in range(self.max_row):
             del self._table[i][cid]
+            del self._attr[i][cid]
         if self.max_col == 0:
-            self._header.append(HeadCell('title1', 'Title1'))
+            self._header.append(HeadAttr('title1', 'Title1'))
 
-    def set_head_attr(self, width: int=None, align: Align=None,
-                      is_sep: bool=None, border: Border=None):
+    def set_head_attr(self, width: None|int = None, align: None|Align = None,
+                      is_sep: None|bool = None, border: None|Border = None,
+                      lofs: None|int = None, rofs: None|int = None):
         """
         Change head attribute over all head cells.
 
-        Arguments
-        ---------
-        width   column width.
-        align   title align for table print.
-        is_sep  string separate by the separator.
-        border  border setting.
+        Parameters
+        ----------
+        width : {None, int}, optional
+            Column width.
+        align : {None, Align}, optional
+            Title align for table printing. 
+        is_sep : {None, bool}, optional
+            String separate by the separator.
+        border : {None, Border}, optional
+            Border setting.
+        lofs : int, optional
+            Number of blanks on the left side of the value string. 
+        rofs : int, optional
+            Number of blanks on the right side of the value string. 
+
+        Notes
+        -----
+        Default None means no change.
         """
         for cell in self._header:
             if width is not None:
@@ -708,87 +920,148 @@ class SimpleTable:
                 cell.is_sep = is_sep
             if border is not None:
                 cell.border = copy.copy(border)
+            if lofs is not None:
+                cell.lofs = lofs
+            if rofs is not None:
+                cell.rofs = rofs
 
-    def set_index_attr(self, width: int=None, align: Align=None,
-                       is_sep: bool=None):
+    def set_index_attr(self, width: None|int = None, align: None|Align = None,
+                       is_sep: None|bool = None, border: None|Border = None,
+                       lofs: None|int = None, rofs: None|int = None):
         """
         Change index attribute over all index cells.
 
-        Arguments
-        ---------
-        width   column width.
-        align   title align for table print.
-        is_sep  string separate by the separator.
+        Parameters
+        ----------
+        width : {None, int}, optional
+            Column width.  If width is 0 means use the maximum length of 
+            the header title or table values as the column width when table 
+            printing.
+        align : {None, Align}, optional
+            Title align for table printing.
+        is_sep : {None, bool}, optional
+            String separate by the separator.
+        border : {None, Border}, optional
+            Border setting.
+        lofs : int, optional
+            Number of blanks on the left side of the value string. 
+        rofs : int, optional
+            Number of blanks on the right side of the value string. 
+
+        Notes
+        -----
+        Default None means no change.
         """
         if width is not None:
             self._index_head.width = width
+        if lofs is not None:
+            self._index_head.lofs = lofs
+        if rofs is not None:
+            self._index_head.rofs = rofs
         for cell in self._index:
             if align is not None:
                 cell.align = align
             if is_sep is not None:
                 cell.is_sep = is_sep
+            if border is not None:
+                cell.border = copy.copy(border)
 
-    def set_row_attr(self, index: int, align: Align=None, is_sep: bool=None,
-                     fs: str=None, border: Border=None):
+    def set_row_attr(self, index: int, align: None|Align = None, 
+                     is_sep: None|bool = None, fs: None|str = None, 
+                     border: None|Border = None):
         """
         Set cell attribute for one data row.
 
-        Arguments
-        ---------
-        index   row ID.
-        align   data align for table print.
-        is_sep  string separate by the separator.
-        fs      format string for table print.
-        border  border setting.
+        Parameters
+        ----------
+        index : int
+            Row ID.
+        align : {None, Align}, optional
+            Title align for table printing. Default is None means no change.
+        is_sep : {None, bool}, optional
+            String separate by the separator. Default is None means no change.
+        fs : {None, str}, optional
+            Format string for table print. Default is None means no change.
+        border : {None, Border}, optional
+            Border setting. Default is None means no change.
+
+        Notes
+        -----
+        Native table doesn't support cell attribute setting.
         """
+        msg = "Native table doesn't support cell attribute setting."
         for i in range(self.max_col):
             if align is not None:
-                self._table[index][i].align = align
+                self._attr[index][i].align = align
             if is_sep is not None:
-                self._table[index][i].is_sep = is_sep
+                self._attr[index][i].is_sep = is_sep
             if fs is not None:
-                self._table[index][i].fs = fs
+                self._attr[index][i].fs = fs
             if border is not None:
-                self._table[index][i].border = copy.copy(border)
+                self._attr[index][i].border = copy.copy(border)
 
-    def set_col_attr(self, index, width: int=None, align: Align=None,
-                     is_sep: bool=None, fs: str=None, border: Border=None):
+    def set_col_attr(self, index: str|int, width: None|int = None, 
+                     align: None|Align = None, is_sep: None|bool = None, 
+                     fs: None|str = None, border: None|Border = None):
         """
         Set cell attribute for one data column.
 
-        Arguments
-        ---------
-        index   column hash key or ID.
-        width   column width.
-        align   data align for table print.
-        is_sep  string separate by the separator.
-        fs      format string for table print.
-        border  border setting.
+        Parameters
+        ----------
+        index : {str, int}
+            Column hash key or ID.
+        width : {None, int}, optional
+            Column width. Default is None means no change.
+            If width is 0 means use the maximum length of the header title 
+            or table values as the column width when table printing.
+        align : {None, Align}, optional
+            Title align for table printing. Default is None means no change.
+        is_sep : {None, bool}, optional
+            String separate by the separator. Default is None means no change.
+        fs : {None, str}, optional
+            Format string for table print. Default is None means no change.
+        border : {None, Border}, optional
+            Border setting. Default is None means no change.
 
-        If width is 0, use the maximum length of data or title as the column
-        size when print the table. If the specific size is small than the
-        length of title, use the title length as the column width.
+        Notes
+        -----
+        Native table doesn't support cell attribute setting.
         """
+        msg = "Native table doesn't support cell attribute setting."
         cid = self.header.id[index] if type(index) is str else index
         if width is not None:
             self._header[cid].width = width
         for i in range(self.max_row):
             if align is not None:
-                self._table[i][cid].align = align
+                self._attr[i][cid].align = align
             if is_sep is not None:
-                self._table[i][cid].is_sep = is_sep
+                self._attr[i][cid].is_sep = is_sep
             if fs is not None:
-                self._table[i][cid].fs = fs
+                self._attr[i][cid].fs = fs
             if border is not None:
-                self._table[i][cid].border = copy.copy(border)
+                self._attr[i][cid].border = copy.copy(border)
 
-    def get_col_width(self, index) -> int:
+    def get_head_width(self) -> list[int]:
+        """
+        Get title width of head cells.  
+        """
+        tlist = []
+        for cell in self._header:
+            if cell.is_sep:
+                toks = cell.title.split(self.sep)
+                tlist.append(max([len(x) for x in toks]))
+            else:
+                tlist.append(len(cell.title))
+        return tlist
+
+    def get_col_width(self, index: str|int) -> int:
         """
         Get a width of the spedific data column.
 
-        Argument
-        --------
-        index  column hash key or ID.
+        Parameters
+        ----------
+        index : {str, int}
+            Column hash key or ID.
         """
         cid = self.header.id[index] if type(index) is str else index
         title = self._header[cid].title
@@ -799,9 +1072,8 @@ class SimpleTable:
 
         if self._header[cid].width == 0:
             for r in range(self.max_row):
-                value = self._table[r][cid].value
-                str_ = self._table[r][cid].fs.format(value)
-                if self._table[r][cid].is_sep:
+                str_ = self._attr[r][cid].fs.format(self._table[r][cid])
+                if self._attr[r][cid].is_sep:
                     vlist = str_.split(self._sep)
                 else:
                     vlist = [str_]
@@ -809,54 +1081,73 @@ class SimpleTable:
                     size = size2
         return size
 
-    def _divider_gen(self, wlist: list, cclist: list, epat: str, dpat: str, 
-                     pclist: list=None, is_bottom: bool=False) -> str:
+    def _div_gen(self, wlist: list[int], alist: list[TableAttr], 
+                 hlist: list[HeadAttr], cpat: str, dpat: str, 
+                 palist: None|list[TableAttr] = None, 
+                 is_bottom: bool = False) -> str:
         """
         Print table divider.
 
-        Arguments
-        ---------
-        wlist      width list of cells.
-        cclist     current cell list.
-        epat       the pattern for the edge cross point.
-        dpat       the pattern for the divider.
-        pclist     previous cell list.
-        is_bottom  generate bottom divider.
-
-        If pclist is not None, border check will reference pclist.
+        Parameters
+        ----------
+        wlist : list[int]
+            list of column width.
+        alist : list[TableAttr]
+            list of cell attributes.
+        hlist : list[HeadAttr]
+            list of header cells.
+        cpat : str
+            cross corner pattern for table printing.
+        dpat : str
+            divider pattern for table printing.
+        palist : {None, list[TableAttr]}, optional
+            list of cell attributes of the abover row. If palist is not None, 
+            border check will reference it. Default is None.
+        is_bottom : bool, optional
+            Generate bottom divider. Default is False.
         """
-        str_ = ''
-        for i in range(len(cclist)):
-            is_edg = cclist[i].border.left
-            is_edg |= cclist[i-1].border.right if i > 0 else False
+        div_str = ' ' * self.lsh
+        for i in range(len(wlist)):
+            is_cor = self.cpat_alon
+            is_cor |= alist[i].border.left
+            is_cor |= alist[i-1].border.right if i > 0 else False
             if is_bottom:
-                is_bor = cclist[i].border.bottom
+                is_bor = alist[i].border.bottom
             else:
-                is_bor = cclist[i].border.top
-                if pclist:
-                    is_edg |= pclist[i].border.left
-                    is_edg |= pclist[i-1].border.right if i > 0 else False
-                    is_bor |= pclist[i].border.bottom
+                is_bor = alist[i].border.top
+                if palist:
+                    is_cor |= palist[i].border.left
+                    is_cor |= palist[i-1].border.right if i > 0 else False
+                    is_bor |= palist[i].border.bottom
+            if i > 0 or self.border.left:
+                div_str += (cpat if is_cor else ' ')
+            div_str += ((dpat if is_bor else ' ') * 
+                        (wlist[i] + hlist[i].lofs + hlist[i].rofs))
+        is_cor = self.cpat_alon
+        is_cor |= alist[-1].border.right
+        is_cor |= palist[-1].border.right if palist else False
+        if self.border.right:
+            div_str += cpat if is_cor else ' '
+        return div_str
 
-            str_ += (epat if is_edg else ' ')
-            str_ += (dpat if is_bor else ' ') * (wlist[i]+2)
-
-        is_edg = cclist[-1].border.right
-        is_edg |= pclist[-1].border.right if pclist else False
-        str_ += epat if is_edg else ' '
-        return str_
-
-    def print(self, fp=None, column: list=None, row: list=None):
+    def print(self, fp = None, column: None|list[str|int] = None, 
+              row: None|list[str|int] = None):
         """
         Print the table.
 
-        Arguments
-        ---------
-        fp      set the file path to export the table.
-        column  specify columns by column hash key or ID, set None to display all.
-        row     specify rows by row hash key or ID, set None to display all.
+        Parameters
+        ----------
+        fp : IO wrapper, optional      
+            Set I/O wrapper to print(). Default is None.
+        column : None|list[str|int], optional
+            Specify columns by column hash key or ID. Default is None means 
+            print all columns.
+        row : None|list[str|int], optional
+            Specify rows by row hash key or ID. Default is None means print 
+            all rows.
         """
-        sep, header, content = self._sep, self._header, self._table
+        sep, head = self._sep, self._header
+        table, attr = self._table, self._attr
 
         if column is not None:
             col_list = column.copy()
@@ -878,43 +1169,46 @@ class SimpleTable:
 
         ## get head data
         for c in col_list:
-            if header[c].is_sep:
-                hdata_list.append(header[c].title.split(sep))
+            if head[c].is_sep:
+                hdata_list.append(head[c].title.split(sep))
             else:
-                hdata_list.append([header[c].title])
+                hdata_list.append([head[c].title])
             hrow_cnt.append(len(hdata_list[-1]))
             size = max([len(x) for x in hdata_list[-1]])
-            size2 = header[c].width
+            size2 = head[c].width
             csize_list.append(size if size > size2 else size2)
 
         ## get value data
         is_force_partp = False
         for r in row_list:
-            vdata_list.append(row_data:=[])
+            vdata_list.append(row:=[])
             vrow_cnt.append(row_cnt:=[])
             for i, c in enumerate(col_list):
-                str_val = content[r][c].fs.format(content[r][c].value)
-                if content[r][c].is_sep:
-                    row_data.append(str_val.split(sep))
+                str_val = attr[r][c].fs.format(table[r][c])
+                if attr[r][c].is_sep:
+                    row.append(str_val.split(sep))
                 else:
-                    row_data.append([str_val])
-                if (rcnt:=len(row_data[-1])) > 1:
+                    row.append([str_val])
+                if (rcnt:=len(row[-1])) > 1:
                     is_force_partp = True
                 row_cnt.append(rcnt)
-                if header[c].width == 0:
-                    size = max([len(x) for x in row_data[-1]])
+                if head[c].width == 0:
+                    size = max([len(x) for x in row[-1]])
                     if size > csize_list[i]:
                         csize_list[i] = size
 
         ## divider print
-        str_ = self._divider_gen(csize_list, [header[c] for c in col_list],
-                                 self.epat, self.hpat)
-        print(str_, file=fp)
+        if self.border.top:
+            str_ = self._div_gen(wlist=csize_list, 
+                                 alist=[head[c] for c in col_list],
+                                 hlist=[head[c] for c in col_list],
+                                 cpat=self.hcpat, dpat=self.hpat)
+            print(str_, file=fp)
 
         ## header print
         max_row, row_st, row_ed = max(hrow_cnt), [], []
         for i, c in enumerate(col_list):
-            match (align:=header[c].align):
+            match (align:=head[c].align):
                 case Align.TL | Align.TC | Align.TR:
                     row_st.append(0)
                     row_ed.append(hrow_cnt[i])
@@ -928,12 +1222,13 @@ class SimpleTable:
                     msg = f"The align ID is undefined (align={align})."
                     raise SyntaxError(msg)
 
+        ofs = [(' ' * head[c].lofs, ' ' * head[c].rofs) for c in col_list]
         for r in range(max_row):
-            str_ = ''
+            str_ = ' ' * self.lsh
             for i, c in enumerate(col_list):
                 if row_st[i] <= r < row_ed[i]:
                     str_val = hdata_list[i][r-row_st[i]]
-                    match (align:=header[c].align):
+                    match (align:=head[c].align):
                         case Align.TL | Align.CL | Align.BL:
                             str_mdy = str_val.ljust(csize_list[i])
                         case Align.TC | Align.CC | Align.BC:
@@ -945,31 +1240,38 @@ class SimpleTable:
                             raise SyntaxError(msg)
                 else:
                     str_mdy = ' ' * csize_list[i]
-                is_sep = header[col_list[i]].border.left
-                is_sep |= header[col_list[i-1]].border.right if i > 0 else False
-                str_ += self.spat if is_sep else ' '
-                str_ += f" {str_mdy} "
-            str_ += self.spat if header[col_list[-1]].border.right else ' '
+                is_sep = head[col_list[i]].border.left
+                is_sep |= head[col_list[i-1]].border.right if i > 0 else False
+                if i > 0 or self.border.left:
+                    str_ += self.spat if is_sep else ' '
+                str_ += "{}{}{}".format(ofs[i][0], str_mdy, ofs[i][1])
+            if self.border.right:
+                str_ += self.spat if head[col_list[-1]].border.right else ' '
             print(str_, file=fp)
 
-        ## content print
+        ## table print
         row_cnt = 0
         for j, r in enumerate(row_list):
             ## header divider
             if j == 0:
-                str_ = self._divider_gen(csize_list, 
-                                         [content[r][c] for c in col_list],
-                                         self.epat, self.hpat,
-                                         pclist=[header[c] for c in col_list])
+                str_ = self._div_gen(
+                        wlist=csize_list, 
+                        alist=[attr[r][c] for c in col_list],
+                        hlist=[head[c] for c in col_list],
+                        cpat=self.hcpat, 
+                        dpat=self.hpat,
+                        palist=[head[c] for c in col_list])
                 print(str_, file=fp)
 
-            ## content divider print
+            ## table divider print
             if row_cnt == self._rdiv_cnt:
-                str_ = self._divider_gen(
-                        csize_list, 
-                        [content[row_list[j]][c] for c in col_list],
-                        self.epat, self.vpat,
-                        pclist=[content[row_list[j-1]][c] for c in col_list])
+                str_ = self._div_gen(
+                        wlist=csize_list, 
+                        alist=[attr[r][c] for c in col_list],
+                        hlist=[head[c] for c in col_list],
+                        cpat=self.vcpat, 
+                        dpat=self.vpat,
+                        palist=[attr[row_list[j-1]][c] for c in col_list])
                 print(str_, file=fp)
                 row_cnt = 1
             else:
@@ -977,7 +1279,7 @@ class SimpleTable:
 
             max_row, row_st, row_ed = max(vrow_cnt[j]), [], []
             for i, c in enumerate(col_list):
-                match (align:=content[r][c].align):
+                match (align:=attr[r][c].align):
                     case Align.TL | Align.TC | Align.TR:
                         row_st.append(0)
                         row_ed.append(vrow_cnt[j][i])
@@ -992,12 +1294,15 @@ class SimpleTable:
                         raise SyntaxError(msg)
 
             for r2 in range(max_row):
-                str_, acc_col_sz = '', 0 
+                str_ = ' ' * self.lsh
+                acc_col_sz = 0 
                 for i, c in enumerate(col_list):
                     if row_st[i] <= r2 < row_ed[i]:
                         str_val = vdata_list[j][i][r2-row_st[i]]
-                        acc_col_sz += csize_list[i] + 3
-                        match (align:=content[r][c].align):
+                        acc_col_sz += csize_list[i] \
+                                        + head[c].lofs + head[c].rofs \
+                                        + int(self.border.left)
+                        match (align:=attr[r][c].align):
                             case Align.TL | Align.CL | Align.BL:
                                 str_mdy = str_val.ljust(csize_list[i])
                             case Align.TC | Align.CC | Align.BC:
@@ -1009,32 +1314,56 @@ class SimpleTable:
                                 raise SyntaxError(msg)
                         if len(str_val) > csize_list[i]:
                             if self.is_partp or is_force_partp:
-                                str_mdy = f" {str_mdy[:csize_list[i]-1]}> "
+                                str_mdy = "{}{}{}".format(
+                                            ofs[i][0],
+                                            f"{str_mdy[:csize_list[i]-1]}>",
+                                            ofs[i][1])
                             else:
-                                str_mdy = f" {str_mdy}\n{' '*acc_col_sz}"
+                                str_mdy = "{}{}".format(
+                                            ofs[i][0],
+                                            f"{str_mdy}\n{' '*acc_col_sz}")
                         else:
-                            str_mdy = f" {str_mdy} "
+                            str_mdy = "{}{}{}".format(ofs[i][0],
+                                                      str_mdy,
+                                                      ofs[i][1])
                     else:
-                        str_mdy = " {} ".format(' ' * csize_list[i])
-                    is_sep = content[r][col_list[i]].border.left
+                        str_mdy = "{}{}{}".format(ofs[i][0],
+                                                  ' ' * csize_list[i],
+                                                  ofs[i][1])
+
+                    is_sep = attr[r][col_list[i]].border.left
                     if i > 0:
-                        is_sep = content[r][col_list[i-1]].border.right
-                    str_ += (self.spat if is_sep else ' ') + str_mdy
-                is_sep = content[r][col_list[-1]].border.right
-                str_ += self.spat if is_sep else ' '
+                        is_sep = attr[r][col_list[i-1]].border.right
+                    if i > 0 or self.border.left:
+                        str_ += (self.spat if is_sep else ' ') + str_mdy
+                    else:
+                        str_ += str_mdy
+
+                is_sep = attr[r][col_list[-1]].border.right
+                if self.border.right:
+                    str_ += self.spat if is_sep else ' '
                 print(str_, file=fp)
 
         ## divider print
-        if len(row_list) == 0:
-            str_ = self._divider_gen(csize_list, [header[c] for c in col_list],
-                                     self.epat, self.hpat)
+        if not self.border.bottom:
+            pass
+        elif len(row_list) == 0:
+            str_ = self._div_gen(
+                    wlist=csize_list, 
+                    alist=[head[c] for c in col_list], 
+                    hlist=[head[c] for c in col_list],
+                    cpat=self.hcpat, 
+                    dpat=self.hpat)
             print(str_, file=fp)
             print(str_, file=fp)
         else:
-            str_ = self._divider_gen(csize_list, 
-                                     [content[row_list[-1]][c] for c in col_list],
-                                     self.epat, self.hpat,
-                                     is_bottom=True)
+            str_ = self._div_gen(
+                    wlist=csize_list, 
+                    alist=[attr[row_list[-1]][c] for c in col_list],
+                    hlist=[head[c] for c in col_list],
+                    cpat=self.hcpat, 
+                    dpat=self.hpat,
+                    is_bottom=True)
             print(str_, file=fp)
 
 
