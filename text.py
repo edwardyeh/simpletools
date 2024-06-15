@@ -34,6 +34,17 @@ class Border:
     left:   bool = True
     right:  bool = True
 
+    def set(self, top: None|bool = None, bottom: None|bool = None, 
+            left: None|bool = None, right: None|bool = None):
+        if top is not None:
+            self.top = top
+        if bottom is not None:
+            self.bottom = bottom
+        if left is not None:
+            self.left = left
+        if right is not None:
+            self.right = right
+
 
 @dataclass
 class HeadAttr:
@@ -86,8 +97,15 @@ class Index:
         if len(self._array) != len(vlist):
             msg = f"Shapes difference. (self:{ax1}, vlist:{ax2})"
             raise ValueError(msg)
-        for c, cell in enumerate(self._array):
-            cell.__dict__[attr] = vlist[c]
+        if attr == 'border':
+            for c, cell in enumerate(self._array):
+                cell.border.top = vlist[c].top
+                cell.border.bottom = vlist[c].bottom
+                cell.border.left = vlist[c].left
+                cell.border.right = vlist[c].right
+        else:
+            for c, cell in enumerate(self._array):
+                cell.__dict__[attr] = vlist[c]
 
     @property
     def shape(self) -> tuple[int]:
@@ -214,12 +232,27 @@ class AttrArray:
             msg = f"Shapes difference. (self:{ax1}, that:{ax2})"
             raise ValueError(msg)
         if self._ndim == 2:
-            for r in range(ax1[0]):
-                for c in range(ax1[1]):
-                    self._array[r][c].__dict__[attr] = vlist[r][c]
+            if attr == 'border':
+                for r in range(ax1[0]):
+                    for c in range(ax1[1]):
+                        self._array[r][c].border.top = vlist[r][c].top
+                        self._array[r][c].border.bottom = vlist[r][c].bottom
+                        self._array[r][c].border.left = vlist[r][c].left
+                        self._array[r][c].border.right = vlist[r][c].right
+            else:
+                for r in range(ax1[0]):
+                    for c in range(ax1[1]):
+                        self._array[r][c].__dict__[attr] = vlist[r][c]
         else:
-            for r in range(ax1[0]):
-                self._array[r].__dict__[attr] = vlist[r]
+            if attr == 'border':
+                for r in range(ax1[0]):
+                    self._array[r].border.top = vlist[r].top
+                    self._array[r].border.bottom = vlist[r].bottom
+                    self._array[r].border.left = vlist[r].left
+                    self._array[r].border.right = vlist[r].right
+            else:
+                for r in range(ax1[0]):
+                    self._array[r].__dict__[attr] = vlist[r]
 
     @property
     def shape(self) -> tuple[int]:
@@ -242,32 +275,32 @@ class AttrArray:
         self._set_attr('align', vlist)
 
     @property
-    def is_sep(self) -> list[Align|list[Align]]:
+    def is_sep(self) -> list[bool|list[bool]]:
         """separation enable for table printing."""
         return self._get_attr('is_sep')
 
     @is_sep.setter
-    def is_sep(self, vlist: list[Align|list[Align]]):
+    def is_sep(self, vlist: list[bool|list[bool]]):
         """separation enable for table printing."""
         self._set_attr('is_sep', vlist)
 
     @property
-    def fs(self) -> list[Align|list[Align]]:
+    def fs(self) -> list[str|list[str]]:
         """f-string for table printing."""
         return self._get_attr('fs')
 
     @fs.setter
-    def fs(self, vlist: list[Align|list[Align]]):
+    def fs(self, vlist: list[str|list[str]]):
         """f-string for table printing."""
         self._set_attr('fs', vlist)
 
     @property
-    def border(self) -> list[Align|list[Align]]:
+    def border(self) -> list[Border|list[Border]]:
         """border type for table printing."""
         return self._get_attr('border')
 
     @border.setter
-    def border(self, vlist: list[Align|list[Align]]):
+    def border(self, vlist: list[Border|list[Border]]):
         """border type for table printing."""
         self._set_attr('border', vlist)
 
@@ -414,58 +447,56 @@ class SimpleTable:
                  lsh:  int = 0,
                  hpat: str = '-', 
                  hcpat: str = '+', 
-                 vpat: str = '-', 
-                 vcpat: str = '+', 
+                 dpat: str = '-', 
+                 dcpat: str = '+', 
                  spat: str = '|',
-                 cpat_alon: bool = False):
+                 cpat_force_on: bool = False):
         """
         Arguments
         ---------
         heads : list[tuple[str]]
-            The header list of the table, format is bellow:
-            [(key1, title1), (key2, title2), ...]
-            Key & Title must be string type.
+            Header of a table, format: [(hash_key, title), ...].
+            Hash key and title must be the string type, hash key is one of the
+            ways to get the data column from a table.
         sep : str, optional
-            Separator used to split the string. Default is '.'.
+            Separator used to split the string, default is '.'.
         rdiv_cnt : int, optional
-            Number of rows between two data row dividers. Default is 0 means 
-            inifite.
+            Number of data rows between two row dividers, default is 0 means 
+            not use row divider.
         is_partp : bool, optional
-            Partial value print if the length of the table value is greater 
-            than the column width. Default is True.
-            If any cell's attribute 'is_sep' is True, force to True.
+            Print partial value if the length of data value is greater than 
+            the column width, default is true. Any cell of a row set true, 
+            other cells will be forced to true.
         border : {None, Border}, optional
-            Set the border around the table is hide or reveal. Default is all 
+            Set the border around the table is hide or reveal, default all 
             borders reveal.
         lsh : int, optional
-            left shift offset for table printing. Default is 0.
+            Left shift offset for table printing, default is 0.
         hpat : str, optional
-            Header divider pattern for table printing. Default is '-'.
+            Header divider pattern for table printing, default is '-'.
         hcpat : str, optional
-            Cross corner pattern of the header for table printing. 
-            Default is '+'.
-        vpat : str, optional
-            Content divider for table printing. Default is '-'.
-        vcpat : str, optional
-            Cross corner pattern of the content for table printing. 
-            Default is '+'.
+            Cross corner pattern of header for table printing, default is '+'.
+        dpat : str, optional
+            Data row divider pattern for table printing, default is '-'.
+        dcpat : str, optional
+            Cross corner pattern of data for table printing, default is '+'.
         spat : str, optional
-            Column separate pattern for table printing. Default is '|'.
-        cpat_alon : bool, optional
-            Always show the cross corner pattern for table printing.
-            Default is False.
+            Column separate pattern for table printing, default is '|'.
+        cpat_force_on : bool, optional
+            Always show cross corner pattern for table printing, 
+            default is false.
         """
         self._sep = sep
         self._rdiv_cnt = math.inf if rdiv_cnt == 0 else rdiv_cnt
         self.is_partp = is_partp
-        self.border = Border() if border is None else border
+        self.border = Border() if border is None else copy.deepcopy(border)
         self.lsh = lsh
         self.hpat = hpat
         self.hcpat = hcpat
-        self.vpat = vpat 
-        self.vcpat = vcpat
+        self.dpat = dpat 
+        self.dcpat = dcpat
         self.spat = spat 
-        self.cpat_alon = cpat_alon
+        self.cpat_force_on = cpat_force_on
 
         self._max_row = 0
         self._index_head = HeadAttr(None, '')
@@ -749,7 +780,8 @@ class SimpleTable:
                 align_ = align if align != Align.NONE else Align.TL
                 is_sep_ = is_sep if is_sep is not None else False
                 fs_ = fs if fs is not None else "{}"
-                border_ = border if border is not None else Border()
+                border_ = copy.deepcopy(border) if border is not None \
+                            else Border()
             else:
                 align_ = align if align != Align.NONE \
                             else self._attr[rid-1][i].align
@@ -757,8 +789,8 @@ class SimpleTable:
                             else self._attr[rid-1][i].is_sep
                 fs_ = fs if fs is not None \
                             else self._attr[rid-1][i].fs
-                border_ = border if border is not None \
-                            else copy.copy(self._attr[rid-1][i].border)
+                border_ = copy.deepcopy(border) if border is not None \
+                            else copy.deepcopy(self._attr[rid-1][i].border)
 
             row.append(data[i] if i < data_size else init)
             attr.append(TableAttr(align=align_, 
@@ -810,7 +842,7 @@ class SimpleTable:
             self._attr[i].insert(cid, TableAttr(align=align,
                                                 is_sep=is_sep,
                                                 fs=fs,
-                                                border=border))
+                                                border=copy.deepcopy(border)))
 
     def swap_row(self, index1: str|int, index2: str|int):
         """
@@ -919,7 +951,10 @@ class SimpleTable:
             if is_sep is not None:
                 cell.is_sep = is_sep
             if border is not None:
-                cell.border = copy.copy(border)
+                cell.border.top = border.top
+                cell.border.bottom = border.bottom
+                cell.border.left = border.left
+                cell.border.right = border.right
             if lofs is not None:
                 cell.lofs = lofs
             if rofs is not None:
@@ -964,7 +999,10 @@ class SimpleTable:
             if is_sep is not None:
                 cell.is_sep = is_sep
             if border is not None:
-                cell.border = copy.copy(border)
+                dell.border.top = border.top
+                dell.border.bottom = border.bottom
+                dell.border.left = border.left
+                dell.border.right = border.right
 
     def set_row_attr(self, index: int, align: None|Align = None, 
                      is_sep: None|bool = None, fs: None|str = None, 
@@ -998,7 +1036,10 @@ class SimpleTable:
             if fs is not None:
                 self._attr[index][i].fs = fs
             if border is not None:
-                self._attr[index][i].border = copy.copy(border)
+                self._attr[index][i].border.top = border.top
+                self._attr[index][i].border.bottom = border.bottom
+                self._attr[index][i].border.left = border.left
+                self._attr[index][i].border.right = border.right
 
     def set_col_attr(self, index: str|int, width: None|int = None, 
                      align: None|Align = None, is_sep: None|bool = None, 
@@ -1039,7 +1080,10 @@ class SimpleTable:
             if fs is not None:
                 self._attr[i][cid].fs = fs
             if border is not None:
-                self._attr[i][cid].border = copy.copy(border)
+                self._attr[i][cid].top = border.top
+                self._attr[i][cid].bottom = border.bottom
+                self._attr[i][cid].left = border.left
+                self._attr[i][cid].right = border.right
 
     def get_head_width(self) -> list[int]:
         """
@@ -1048,7 +1092,7 @@ class SimpleTable:
         tlist = []
         for cell in self._header:
             if cell.is_sep:
-                toks = cell.title.split(self.sep)
+                toks = cell.title.split(self._sep)
                 tlist.append(max([len(x) for x in toks]))
             else:
                 tlist.append(len(cell.title))
@@ -1091,24 +1135,24 @@ class SimpleTable:
         Parameters
         ----------
         wlist : list[int]
-            list of column width.
+            Column width of cells of the specific row.
         alist : list[TableAttr]
-            list of cell attributes.
+            Attributes of cells of the specific row.
         hlist : list[HeadAttr]
-            list of header cells.
+            Header cells for the specific row.
         cpat : str
-            cross corner pattern for table printing.
+            Cross corner pattern for table printing.
         dpat : str
-            divider pattern for table printing.
+            Divider pattern for table printing.
         palist : {None, list[TableAttr]}, optional
-            list of cell attributes of the abover row. If palist is not None, 
-            border check will reference it. Default is None.
+            Attributes of cells of the row above the specific row, default none.
+            If palist is not none, border check will reference it.
         is_bottom : bool, optional
             Generate bottom divider. Default is False.
         """
         div_str = ' ' * self.lsh
         for i in range(len(wlist)):
-            is_cor = self.cpat_alon
+            is_cor = self.cpat_force_on
             is_cor |= alist[i].border.left
             is_cor |= alist[i-1].border.right if i > 0 else False
             if is_bottom:
@@ -1123,7 +1167,7 @@ class SimpleTable:
                 div_str += (cpat if is_cor else ' ')
             div_str += ((dpat if is_bor else ' ') * 
                         (wlist[i] + hlist[i].lofs + hlist[i].rofs))
-        is_cor = self.cpat_alon
+        is_cor = self.cpat_force_on
         is_cor |= alist[-1].border.right
         is_cor |= palist[-1].border.right if palist else False
         if self.border.right:
@@ -1131,7 +1175,7 @@ class SimpleTable:
         return div_str
 
     def print(self, fp = None, column: None|list[str|int] = None, 
-              row: None|list[str|int] = None):
+              row: None|list[str|int] = None, mode: int = 0):
         """
         Print the table.
 
@@ -1145,9 +1189,13 @@ class SimpleTable:
         row : None|list[str|int], optional
             Specify rows by row hash key or ID. Default is None means print 
             all rows.
+        mode : int, optional
+            Ouptut mode select, default is 0.
+              0: full table.
+              1: only header.
+              2: only data.
         """
-        sep, head = self._sep, self._header
-        table, attr = self._table, self._attr
+        head, table, attr = self._header, self._table, self._attr
 
         if column is not None:
             col_list = column.copy()
@@ -1170,7 +1218,7 @@ class SimpleTable:
         ## get head data
         for c in col_list:
             if head[c].is_sep:
-                hdata_list.append(head[c].title.split(sep))
+                hdata_list.append(head[c].title.split(self._sep))
             else:
                 hdata_list.append([head[c].title])
             hrow_cnt.append(len(hdata_list[-1]))
@@ -1186,7 +1234,7 @@ class SimpleTable:
             for i, c in enumerate(col_list):
                 str_val = attr[r][c].fs.format(table[r][c])
                 if attr[r][c].is_sep:
-                    row.append(str_val.split(sep))
+                    row.append(str_val.split(slef._sep))
                 else:
                     row.append([str_val])
                 if (rcnt:=len(row[-1])) > 1:
@@ -1197,63 +1245,64 @@ class SimpleTable:
                     if size > csize_list[i]:
                         csize_list[i] = size
 
-        ## divider print
-        if self.border.top:
-            str_ = self._div_gen(wlist=csize_list, 
-                                 alist=[head[c] for c in col_list],
-                                 hlist=[head[c] for c in col_list],
-                                 cpat=self.hcpat, dpat=self.hpat)
-            print(str_, file=fp)
-
-        ## header print
-        max_row, row_st, row_ed = max(hrow_cnt), [], []
-        for i, c in enumerate(col_list):
-            match (align:=head[c].align):
-                case Align.TL | Align.TC | Align.TR:
-                    row_st.append(0)
-                    row_ed.append(hrow_cnt[i])
-                case Align.CL | Align.CC | Align.CR:
-                    row_st.append(int((max_row-hrow_cnt[i])/2))
-                    row_ed.append(row_st[-1]+hrow_cnt[i])
-                case Align.BL | Align.BC | Align.BR:
-                    row_st.append(max_row-hrow_cnt[i])
-                    row_ed.append(max_row)
-                case _:
-                    msg = f"The align ID is undefined (align={align})."
-                    raise SyntaxError(msg)
-
         ofs = [(' ' * head[c].lofs, ' ' * head[c].rofs) for c in col_list]
-        for r in range(max_row):
-            str_ = ' ' * self.lsh
+        if mode != 2:
+            ## divider print
+            if self.border.top:
+                str_ = self._div_gen(wlist=csize_list, 
+                                     alist=[head[c] for c in col_list],
+                                     hlist=[head[c] for c in col_list],
+                                     cpat=self.hcpat, dpat=self.hpat)
+                print(str_, file=fp)
+
+            ## header print
+            max_row, row_st, row_ed = max(hrow_cnt), [], []
             for i, c in enumerate(col_list):
-                if row_st[i] <= r < row_ed[i]:
-                    str_val = hdata_list[i][r-row_st[i]]
-                    match (align:=head[c].align):
-                        case Align.TL | Align.CL | Align.BL:
-                            str_mdy = str_val.ljust(csize_list[i])
-                        case Align.TC | Align.CC | Align.BC:
-                            str_mdy = str_val.center(csize_list[i])
-                        case Align.TR | Align.CR | Align.BR:
-                            str_mdy = str_val.rjust(csize_list[i])
-                        case _:
-                            msg = f"The align ID is undefined (align={align})."
-                            raise SyntaxError(msg)
-                else:
-                    str_mdy = ' ' * csize_list[i]
-                is_sep = head[col_list[i]].border.left
-                is_sep |= head[col_list[i-1]].border.right if i > 0 else False
-                if i > 0 or self.border.left:
-                    str_ += self.spat if is_sep else ' '
-                str_ += "{}{}{}".format(ofs[i][0], str_mdy, ofs[i][1])
-            if self.border.right:
-                str_ += self.spat if head[col_list[-1]].border.right else ' '
-            print(str_, file=fp)
+                match (align:=head[c].align):
+                    case Align.TL | Align.TC | Align.TR:
+                        row_st.append(0)
+                        row_ed.append(hrow_cnt[i])
+                    case Align.CL | Align.CC | Align.CR:
+                        row_st.append(int((max_row-hrow_cnt[i])/2))
+                        row_ed.append(row_st[-1]+hrow_cnt[i])
+                    case Align.BL | Align.BC | Align.BR:
+                        row_st.append(max_row-hrow_cnt[i])
+                        row_ed.append(max_row)
+                    case _:
+                        msg = f"The align ID is undefined (align={align})."
+                        raise SyntaxError(msg)
+
+            for r in range(max_row):
+                str_ = ' ' * self.lsh
+                for i, c in enumerate(col_list):
+                    if row_st[i] <= r < row_ed[i]:
+                        str_val = hdata_list[i][r-row_st[i]]
+                        match (align:=head[c].align):
+                            case Align.TL | Align.CL | Align.BL:
+                                str_mdy = str_val.ljust(csize_list[i])
+                            case Align.TC | Align.CC | Align.BC:
+                                str_mdy = str_val.center(csize_list[i])
+                            case Align.TR | Align.CR | Align.BR:
+                                str_mdy = str_val.rjust(csize_list[i])
+                            case _:
+                                msg = f"The align ID is undefined (align={align})."
+                                raise SyntaxError(msg)
+                    else:
+                        str_mdy = ' ' * csize_list[i]
+                    is_sep = head[col_list[i]].border.left
+                    is_sep |= head[col_list[i-1]].border.right if i > 0 else False
+                    if i > 0 or self.border.left:
+                        str_ += self.spat if is_sep else ' '
+                    str_ += "{}{}{}".format(ofs[i][0], str_mdy, ofs[i][1])
+                if self.border.right:
+                    str_ += self.spat if head[col_list[-1]].border.right else ' '
+                print(str_, file=fp)
 
         ## table print
         row_cnt = 0
         for j, r in enumerate(row_list):
             ## header divider
-            if j == 0:
+            if j == 0 and not (mode == 2 and not self.border.top):
                 str_ = self._div_gen(
                         wlist=csize_list, 
                         alist=[attr[r][c] for c in col_list],
@@ -1262,6 +1311,8 @@ class SimpleTable:
                         dpat=self.hpat,
                         palist=[head[c] for c in col_list])
                 print(str_, file=fp)
+                if mode == 1:
+                    return
 
             ## table divider print
             if row_cnt == self._rdiv_cnt:
@@ -1269,8 +1320,8 @@ class SimpleTable:
                         wlist=csize_list, 
                         alist=[attr[r][c] for c in col_list],
                         hlist=[head[c] for c in col_list],
-                        cpat=self.vcpat, 
-                        dpat=self.vpat,
+                        cpat=self.dcpat, 
+                        dpat=self.dpat,
                         palist=[attr[row_list[j-1]][c] for c in col_list])
                 print(str_, file=fp)
                 row_cnt = 1
@@ -1333,7 +1384,7 @@ class SimpleTable:
 
                     is_sep = attr[r][col_list[i]].border.left
                     if i > 0:
-                        is_sep = attr[r][col_list[i-1]].border.right
+                        is_sep |= attr[r][col_list[i-1]].border.right
                     if i > 0 or self.border.left:
                         str_ += (self.spat if is_sep else ' ') + str_mdy
                     else:
