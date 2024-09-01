@@ -157,6 +157,12 @@ class Block:
                     if (size:=len(val)) > self.col_len[c]:
                         self.col_len[c] = size
 
+    def update_col_len(self):
+        for row in self.data:
+            for c, col in enumerate(row):
+                if (new_len:=len(str(col))) > self.col_len[c]:
+                    self.col_len[c] = new_len
+
     def _fprint(self, data: Any, align: str, col_len, end='\n', file=None):
         """Formatted print."""
         if align == 'c':
