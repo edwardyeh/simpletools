@@ -20,3 +20,7 @@ v1.4.0
     1. text/SimpleTable
         1. Add new table style.
 
+v1.5.0
+    1. text/SimpleTable
+        1. refactor function.
+
